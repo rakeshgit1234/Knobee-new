@@ -1,0 +1,57 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+ios/build
+
+# Android
+android/app/build
+android/build
+android/.gradle
+android/local.properties
+*.keystore
+*.jks
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# React Native
+.expo/
+.expo-shared/
+
+# Metro
+.metro-health-check*
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
