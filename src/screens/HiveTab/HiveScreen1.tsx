@@ -1,34 +1,25 @@
 /**
  * HiveFamilyTree.js — Single file, complete implementation
  *
- * Button placement (per screenshot):
- *
- *  PARENT ROW:
- *    Left parent  → ⇄ button(s) at BOTTOM-LEFT corner of card (below card, left-aligned)
- *    Right parent → ⇄ button(s) at BOTTOM-RIGHT corner of card (below card, right-aligned)
- *    Dots on connector bar sit ABOVE the bar (between parent card bottoms and bar)
- *
- *  CENTER:
- *    ⇄ button(s) on LEFT side, vertically centred (unchanged, correct)
- *
- *  CHILD ROW:
- *    Left child  → ⇄ button(s) at TOP-LEFT corner (above card, left-aligned)
- *    Right child → ⇄ button(s) at TOP-RIGHT corner (above card, right-aligned)
- *    Dots sit BELOW the bar (between bar and child card tops)
- *    Connector arrow tip touches child card top directly (zero gap)
- *
- * Gender rules:
- *   Male   → 1 blue ⇄
- *   Female → 1 pink ⇄  (+ 1 blue ⇄ if married), side by side horizontally
+ * New in this version:
+ *  - Long press any card → context popup (photo, name, relation, menu items)
+ *  - Sandhya now has 3 children: raghav, shruti, dev
+ *  - Children row shows 2 at a time; left/right arrows swap to next/prev pair
+ *  - Selected cards get orange border + orange checkmark on photo
+ *  - Bottom bar shows "N Selected | Clear | Next →" when any card is selected
  *
  * Dependencies:
  *   npx expo install react-native-reanimated react-native-svg react-native-gesture-handler
  *   babel.config.js → plugins: ['react-native-reanimated/plugin']
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import {
-  Dimensions, Image, StyleSheet, Text, TouchableOpacity, View,
+  Dimensions, Image, Modal, PanResponder, ScrollView,
+  StyleSheet, Text, TouchableOpacity,
+  TouchableWithoutFeedback, View,
 } from 'react-native';
 import Animated, {
   useAnimatedStyle, useSharedValue, withSpring,
@@ -47,6 +38,7 @@ const C = {
   connector: '#BBBBBB', dotBlue: '#5BB8D4', dotPink: '#E879A0',
   dotBlueDim: '#A8D8EC', dotPinkDim: '#F0AACE',
   text: '#1A1A1A', sub: '#555', white: '#FFF', black: '#111', decBg: '#B0B0B0',
+  orange: '#F5A623', orangeLight: '#FFF3E0',
 };
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -69,13 +61,16 @@ const PEOPLE = {
   shruti: { id:'shruti', name:'Shruti Kohli', photo:'https://randomuser.me/api/portraits/women/29.jpg',
     gender:'female', birthDate:'Feb 19, 1998', deathDate:null,
     profession:'Student (MBBS)', city:'Kyiv', flag:'🇺🇦', flagCode:'UA', followers:1000, isMarried:false },
+  // 3rd child of Sandhya
+  dev: { id:'dev', name:'Dev Kohli', photo:'https://randomuser.me/api/portraits/men/22.jpg',
+    gender:'male', birthDate:'Mar 5, 2002', deathDate:null,
+    profession:'Student (Class 12)', city:'Noida', flag:'🇮🇳', flagCode:'IN', followers:56, isMarried:false },
   vikram: { id:'vikram', name:'Vikram Seth', photo:'https://randomuser.me/api/portraits/men/60.jpg',
     gender:'male', birthDate:'Dec 3, 1930', deathDate:'Jul 22, 2010',
     profession:'Retired Judge', city:'Allahabad', flag:'🇮🇳', flagCode:'IN', followers:5, isMarried:true },
   kamla: { id:'kamla', name:'Kamla Seth', photo:'https://randomuser.me/api/portraits/women/60.jpg',
     gender:'female', birthDate:'Mar 8, 1935', deathDate:'Nov 14, 2018',
     profession:'Teacher', city:'Allahabad', flag:'🇮🇳', flagCode:'IN', followers:2, isMarried:true },
-  // Sandhya's siblings (children of Shubham & Maya)
   rohan: { id:'rohan', name:'Rohan Seth', photo:'https://randomuser.me/api/portraits/men/34.jpg',
     gender:'male', birthDate:'May 20, 1970', deathDate:null,
     profession:'Software Engineer', city:'Mumbai', flag:'🇮🇳', flagCode:'IN', followers:128, isMarried:true },
@@ -97,8 +92,10 @@ const RELATIONSHIPS = [
   { type:'spouse', sourceId:'sandhya', targetId:'arjun' },
   { type:'parent', sourceId:'sandhya', targetId:'raghav' },
   { type:'parent', sourceId:'sandhya', targetId:'shruti' },
+  { type:'parent', sourceId:'sandhya', targetId:'dev' },
   { type:'parent', sourceId:'arjun',   targetId:'raghav' },
   { type:'parent', sourceId:'arjun',   targetId:'shruti' },
+  { type:'parent', sourceId:'arjun',   targetId:'dev' },
 ];
 
 function getParents(id) {
@@ -112,9 +109,6 @@ function getSpouses(id) {
 function getChildren(id) {
   return [...new Set(RELATIONSHIPS.filter(r => r.type==='parent' && r.sourceId===id).map(r=>r.targetId))];
 }
-
-// Siblings = people who share at least one parent with id (excluding id itself)
-// Ordered consistently by their first appearance in RELATIONSHIPS children list
 function getSiblings(id) {
   const myParents = getParents(id);
   if (myParents.length === 0) return [];
@@ -125,42 +119,54 @@ function getSiblings(id) {
   return [...sibSet];
 }
 
+// Derive relationship label for popup subtitle
+function getRelationLabel(personId, focusedId) {
+  const focused = PEOPLE[focusedId];
+  if (!focused) return '';
+  const focusedName = focused.name.split(' ')[0];
+  if (getParents(focusedId).includes(personId)) {
+    return PEOPLE[personId].gender === 'male' ? `${focusedName}'s Father` : `${focusedName}'s Mother`;
+  }
+  if (getChildren(focusedId).includes(personId)) {
+    return PEOPLE[personId].gender === 'male' ? `${focusedName}'s Son` : `${focusedName}'s Daughter`;
+  }
+  if (getSpouses(focusedId).includes(personId)) {
+    return PEOPLE[personId].gender === 'male' ? `${focusedName}'s Husband` : `${focusedName}'s Wife`;
+  }
+  const sib = getSiblings(focusedId);
+  if (sib.includes(personId)) {
+    return PEOPLE[personId].gender === 'male' ? `${focusedName}'s Brother` : `${focusedName}'s Sister`;
+  }
+  return '';
+}
+
 // ─── Layout constants ────────────────────────────────────────────────────────
 const HEADER_H    = 54;
 const CARD_W      = 164;
 const CARD_H      = 155;
-const H_GAP       = 40;   // wide gap so heart badge fits cleanly between cards
+const H_GAP       = 40;
+const CHILDREN_PER_PAGE = 2;   // show 2 children at a time
 
-// ⇄ button dimensions
 const BTN_W       = 34;
 const BTN_H       = 32;
-const BTN_H_GAP   = 5;   // horizontal gap between two side-by-side buttons
-const BTN_V_GAP   = 6;   // vertical gap between card edge and buttons
+const BTN_H_GAP   = 5;
+const BTN_V_GAP   = 6;
 
-// Center card: buttons on LEFT side, vertically stacked
 const CTR_BTN_W   = 34;
 const CTR_BTN_H   = 32;
-const CTR_BTN_GAP = 6;   // gap between stacked buttons
-const CTR_BTN_OFF = 44;  // left of card.x
+const CTR_BTN_GAP = 6;
+const CTR_BTN_OFF = 44;
 
 const ADD_HIVER_H = 56;
 const USABLE_H    = CANVAS_H - HEADER_H - ADD_HIVER_H;
 
-// Zone heights (30% / 38% / 32%)
 const ZONE_T = USABLE_H * 0.27;
 const ZONE_M = USABLE_H * 0.36;
 const ZONE_B = USABLE_H * 0.32;
 
-// Parent cards: top of card, centred in zone T
-const PARENTS_CARD_Y = HEADER_H + (ZONE_T - CARD_H) / 2;
-// Parent buttons sit just below card bottom (bottom-left or bottom-right of card)
-const PARENTS_BTN_Y  = PARENTS_CARD_Y + CARD_H + BTN_V_GAP;
-
-// Center card: centred in zone M
-const CENTER_CARD_Y  = HEADER_H + ZONE_T + (ZONE_M - CARD_H) / 2;
-
-// Child cards: occupying zone B
-// Buttons sit just ABOVE the card (top-left or top-right of card)
+const PARENTS_CARD_Y  = HEADER_H + (ZONE_T - CARD_H) / 2;
+const PARENTS_BTN_Y   = PARENTS_CARD_Y + CARD_H + BTN_V_GAP;
+const CENTER_CARD_Y   = HEADER_H + ZONE_T + (ZONE_M - CARD_H) / 2;
 const CHILDREN_CARD_Y = HEADER_H + ZONE_T + ZONE_M + (ZONE_B - CARD_H) / 2;
 const CHILDREN_BTN_Y  = CHILDREN_CARD_Y - BTN_H - BTN_V_GAP;
 
@@ -173,18 +179,21 @@ function rowXs(count, cw = CARD_W, gap = H_GAP) {
   return Array.from({ length: count }, (_, i) => start + i * (cw + gap));
 }
 
-function buildLayout(focusedId) {
+// childPage: 0-based page index for child pagination
+function buildLayout(focusedId, childPage = 0) {
   const nodes = {};
   const parents     = getParents(focusedId);
   const spouses     = getSpouses(focusedId);
   const allChildren = getChildren(focusedId);
-  const children    = allChildren.slice(0, 2);
+
+  // Paginate children: show CHILDREN_PER_PAGE at a time
+  const pageStart     = childPage * CHILDREN_PER_PAGE;
+  const visibleChildren = allChildren.slice(pageStart, pageStart + CHILDREN_PER_PAGE);
 
   nodes[focusedId] = {
     x: SW/2 - CARD_W/2, y: CENTER_CARD_Y,
     w: CARD_W, h: CARD_H, role: 'center', zIndex: 30,
   };
-
   spouses.forEach((sid, i) => {
     nodes[sid] = {
       x: SW/2 - CARD_W/2 + (i+1)*SPOUSE_OFFSET_X,
@@ -192,22 +201,21 @@ function buildLayout(focusedId) {
       w: CARD_W, h: CARD_H, role: 'spouse', zIndex: 30-(i+1), spouseIndex: i,
     };
   });
-
   if (parents.length > 0) {
     const xs = rowXs(parents.length);
     parents.forEach((pid, i) => {
       nodes[pid] = { x: xs[i], y: PARENTS_CARD_Y, w: CARD_W, h: CARD_H, role: 'parent', zIndex: 5 };
     });
   }
-
-  if (children.length > 0) {
-    const xs = rowXs(children.length);
-    children.forEach((cid, i) => {
+  if (visibleChildren.length > 0) {
+    const xs = rowXs(visibleChildren.length);
+    visibleChildren.forEach((cid, i) => {
       nodes[cid] = { x: xs[i], y: CHILDREN_CARD_Y, w: CARD_W, h: CARD_H, role: 'child', zIndex: 5 };
     });
   }
 
-  return { nodes, allChildren, children };
+  const totalChildPages = Math.ceil(allChildren.length / CHILDREN_PER_PAGE);
+  return { nodes, allChildren, visibleChildren, totalChildPages };
 }
 
 // ─── Spring ───────────────────────────────────────────────────────────────────
@@ -232,40 +240,67 @@ function AnimatedNode({ x, y, zIndex, width, height, children }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONTEXT POPUP  (long press)
+// Shows: large photo, name, relation label, then menu items
+// ─────────────────────────────────────────────────────────────────────────────
+const POPUP_MENU = [
+  { icon: '⊕', label: 'Add Hiver' },
+  { icon: '👤', label: 'Profile' },
+  { icon: '⇄', label: 'Chattrz' },
+  { icon: '📄', label: 'Seth Diaries' },
+  { icon: '⊘', label: 'Block' },
+];
+
+function CardPopup({ person, focusedId, onClose }) {
+  if (!person) return null;
+  const relation = getRelationLabel(person.id, focusedId);
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.popupOverlay}>
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={styles.popupCard}>
+              {/* Photo header */}
+              <View style={styles.popupPhotoWrap}>
+                <Image source={{ uri: person.photo }} style={styles.popupPhoto} />
+                {/* Teal checkmark */}
+                <View style={styles.popupCheck}>
+                  <Text style={styles.popupCheckTxt}>✓</Text>
+                </View>
+              </View>
+
+              {/* Name + relation */}
+              <View style={styles.popupNameWrap}>
+                <Text style={styles.popupName}>{person.name}</Text>
+                {!!relation && <Text style={styles.popupRelation}>{relation}</Text>}
+              </View>
+
+              <View style={styles.popupDivider} />
+
+              {/* Menu items */}
+              {POPUP_MENU.map((item, i) => (
+                <TouchableOpacity key={i} style={styles.popupMenuItem} onPress={onClose} activeOpacity={0.7}>
+                  <Text style={styles.popupMenuIcon}>{item.icon}</Text>
+                  <Text style={styles.popupMenuLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FAMILY INDICATOR ⇄ BUTTONS
-//
-// Position logic per role × card position in row:
-//
-//  role='parent', isLeftCard  → buttons below card, LEFT-aligned  (bottom-left corner)
-//  role='parent', isRightCard → buttons below card, RIGHT-aligned (bottom-right corner)
-//  role='center'              → buttons LEFT of card, vertically stacked column
-//  role='child',  isLeftCard  → buttons above card, LEFT-aligned  (top-left corner)
-//  role='child',  isRightCard → buttons above card, RIGHT-aligned (top-right corner)
-//
-// Button composition:
-//   Male              → [blue ⇄]
-//   Female, unmarried → [pink ⇄]
-//   Female, married   → [pink ⇄] [blue ⇄]  (side-by-side horizontally for parent/child rows)
-//                       [pink ⇄]             (stacked vertically for center column)
-//                       [blue ⇄]
 // ─────────────────────────────────────────────────────────────────────────────
 function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
   if (role === 'spouse') return null;
+  const isMale    = person.gender === 'male';
+  const isMarried = person.isMarried;
+  const btns = isMale ? [C.blueBtn] : (isMarried ? [C.pinkBtn, C.blueBtn] : [C.pinkBtn]);
 
-  const isMale     = person.gender === 'male';
-  const isFemale   = person.gender === 'female';
-  const isMarried  = person.isMarried;
-
-  // Build button list: [{color}]
-  const btns = [];
-  if (isMale) {
-    btns.push(C.blueBtn);
-  } else {
-    btns.push(C.pinkBtn);
-    if (isMarried) btns.push(C.blueBtn);
-  }
-
-  // ── CENTER: vertical column on LEFT side ──────────────────────────────────
   if (role === 'center') {
     const totalH = btns.length * CTR_BTN_H + (btns.length - 1) * CTR_BTN_GAP;
     const startY = cardY + (CARD_H - totalH) / 2;
@@ -274,10 +309,8 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
       <>
         {btns.map((color, i) => (
           <View key={i} style={[styles.sideBtn, {
-            left: bx,
-            top:  startY + i * (CTR_BTN_H + CTR_BTN_GAP),
-            width: CTR_BTN_W, height: CTR_BTN_H,
-            backgroundColor: color,
+            left: bx, top: startY + i*(CTR_BTN_H+CTR_BTN_GAP),
+            width: CTR_BTN_W, height: CTR_BTN_H, backgroundColor: color,
           }]}>
             <Text style={styles.sideBtnIcon}>⇄</Text>
           </View>
@@ -286,65 +319,35 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
     );
   }
 
-  // ── PARENT row: horizontal row of buttons ─────────────────────────────────
-  // Below card; left card → left-aligned, right card → right-aligned
-  if (role === 'parent') {
-    const totalW = btns.length * BTN_W + (btns.length - 1) * BTN_H_GAP;
-    const bx = isLeftCard
-      ? cardX                          // left-aligned to card left edge
-      : cardX + CARD_W - totalW;       // right-aligned to card right edge
-    const by = PARENTS_BTN_Y;
-    return (
-      <>
-        {btns.map((color, i) => (
-          <View key={i} style={[styles.sideBtn, {
-            left: bx + i * (BTN_W + BTN_H_GAP),
-            top:  by,
-            width: BTN_W, height: BTN_H,
-            backgroundColor: color,
-          }]}>
-            <Text style={styles.sideBtnIcon}>⇄</Text>
-          </View>
-        ))}
-      </>
-    );
-  }
+  const totalW = btns.length * BTN_W + (btns.length - 1) * BTN_H_GAP;
+  const bx = isLeftCard ? cardX : cardX + CARD_W - totalW;
+  const by = role === 'parent' ? PARENTS_BTN_Y : CHILDREN_BTN_Y;
 
-  // ── CHILD row: horizontal row of buttons ──────────────────────────────────
-  // Above card; left card → left-aligned, right card → right-aligned
-  if (role === 'child') {
-    const totalW = btns.length * BTN_W + (btns.length - 1) * BTN_H_GAP;
-    const bx = isLeftCard
-      ? cardX                          // left-aligned to card left edge
-      : cardX + CARD_W - totalW;       // right-aligned to card right edge
-    const by = CHILDREN_BTN_Y;
-    return (
-      <>
-        {btns.map((color, i) => (
-          <View key={i} style={[styles.sideBtn, {
-            left: bx + i * (BTN_W + BTN_H_GAP),
-            top:  by,
-            width: BTN_W, height: BTN_H,
-            backgroundColor: color,
-          }]}>
-            <Text style={styles.sideBtnIcon}>⇄</Text>
-          </View>
-        ))}
-      </>
-    );
-  }
-
-  return null;
+  return (
+    <>
+      {btns.map((color, i) => (
+        <View key={i} style={[styles.sideBtn, {
+          left: bx + i*(BTN_W+BTN_H_GAP), top: by,
+          width: BTN_W, height: BTN_H, backgroundColor: color,
+        }]}>
+          <Text style={styles.sideBtnIcon}>⇄</Text>
+        </View>
+      ))}
+    </>
+  );
 }
 
-// ─── Person Card ─────────────────────────────────────────────────────────────
-function PersonCard({ person, isCenter, onPress, cardW, cardH }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// PERSON CARD
+// ─────────────────────────────────────────────────────────────────────────────
+function PersonCard({ person, isCenter, isSelected, onPress, onLongPress, cardW, cardH }) {
   const [following, setFollowing] = useState(false);
   const isDeceased = !!person.deathDate;
   const isFemale   = person.gender === 'female';
 
   let bg = C.gray, bd = C.grayBd;
   if (!isDeceased) { bg = isFemale ? C.pink : C.blue; bd = isFemale ? C.pinkBd : C.blueBd; }
+  if (isSelected) bd = C.orange;
 
   const fc = person.followers >= 1000 ? `${Math.round(person.followers/1000)}K` : `${person.followers}`;
 
@@ -352,17 +355,29 @@ function PersonCard({ person, isCenter, onPress, cardW, cardH }) {
     <TouchableOpacity
       activeOpacity={isCenter ? 1 : 0.78}
       onPress={!isCenter ? onPress : undefined}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       style={{ width: cardW, height: cardH }}
     >
-      <View style={[styles.card, { backgroundColor: bg, borderColor: bd, width: cardW, height: cardH },
-        isCenter && styles.cardCenter]}>
-
+      <View style={[
+        styles.card,
+        { backgroundColor: bg, borderColor: bd, width: cardW, height: cardH },
+        isCenter && styles.cardCenter,
+        isSelected && styles.cardSelected,
+      ]}>
         <View style={styles.cardTop}>
           <View style={styles.photoWrap}>
             <Image source={{ uri: person.photo }} style={styles.photo} />
-            <View style={styles.followerBubble}>
-              <Text style={styles.followerTxt}>{fc}</Text>
-            </View>
+            {/* Follower count OR selected checkmark */}
+            {isSelected ? (
+              <View style={[styles.followerBubble, { backgroundColor: C.orange }]}>
+                <Text style={[styles.followerTxt, { color: C.white }]}>✓</Text>
+              </View>
+            ) : (
+              <View style={styles.followerBubble}>
+                <Text style={styles.followerTxt}>{fc}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.nameCol}>
             <Text style={styles.nameTxt} numberOfLines={2}>{person.name}</Text>
@@ -384,7 +399,7 @@ function PersonCard({ person, isCenter, onPress, cardW, cardH }) {
         <View style={[styles.divider, { backgroundColor: bd }]} />
 
         <View style={styles.cardBottom}>
-          <View style={[styles.accentBar, { backgroundColor: bd }]} />
+          <View style={[styles.accentBar, { backgroundColor: isSelected ? C.orange : bd }]} />
           <View style={styles.infoCol}>
             <Text style={styles.profTxt} numberOfLines={1}>{person.profession}</Text>
             <View style={styles.locRow}>
@@ -419,27 +434,11 @@ function PersonCard({ person, isCenter, onPress, cardW, cardH }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG CONNECTORS
-//
-// Parent bar:
-//   - Hollow circle at each parent card bottom
-//   - Vertical drop to bar
-//   - Horizontal bar
-//   - Dots sit ABOVE bar (between card bottoms and bar) → dotY = barY - DOT_ABOVE
-//   - Vertical from bar midpoint down to center top
-//   - Arrow touches center card top
-//
-// Child bar:
-//   - Hollow circle at center card bottom
-//   - Vertical drop to bar
-//   - Horizontal bar
-//   - Dots sit BELOW bar (between bar and child card tops) → dotY = barY + DOT_BELOW
-//   - Vertical drops from bar to each child card top
-//   - Arrow tip touches child card top directly (y2 = CHILDREN_CARD_Y)
 // ─────────────────────────────────────────────────────────────────────────────
-const DOT_R      = 5;
-const DOT_ABOVE  = 14;  // how many px above bar the dots are rendered (parent side)
-const DOT_BELOW  = 14;  // how many px below bar the dots are rendered (child side)
-const ARROW_S    = 6;
+const DOT_R     = 5;
+const DOT_ABOVE = 14;
+const DOT_BELOW = 14;
+const ARROW_S   = 6;
 
 function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren }) {
   const focused = nodes[focusedId];
@@ -453,10 +452,9 @@ function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren 
   // ── Parents → Center ─────────────────────────────────────────────────────
   const parentNodes = Object.values(nodes).filter(n => n.role === 'parent');
   if (parentNodes.length > 0) {
-    // Bar sits 55% of the way from parent bottoms to center top
     const parBot = PARENTS_CARD_Y + CARD_H;
     const barY   = parBot + (cTop - parBot) * 0.55;
-    const dotY   = barY - DOT_ABOVE;  // dots ABOVE bar
+    const dotY   = barY - DOT_ABOVE;
 
     parentNodes.forEach((pn, i) => {
       const px = pn.x + CARD_W / 2;
@@ -475,28 +473,20 @@ function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren 
         els.push(<Line key="phbar" x1={px} y1={barY} x2={cxMid} y2={barY}
           stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />);
     } else {
-      const leftX  = Math.min(...parentNodes.map(n => n.x + CARD_W / 2));
+      const leftX = Math.min(...parentNodes.map(n => n.x + CARD_W / 2));
       const rightX = Math.max(...parentNodes.map(n => n.x + CARD_W / 2));
       const midX   = (leftX + rightX) / 2;
-
-      // Horizontal bar
-      els.push(<Line key="pbar" x1={leftX} y1={barY} x2={rightX} y2={barY}
-        stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />);
-
-      // Dots ABOVE bar — blue · pink · blue
       els.push(
-        <Circle key="pd1" cx={midX - 13} cy={dotY} r={DOT_R} fill={C.dotBlue} />,
-        <Circle key="pd2" cx={midX}      cy={dotY} r={DOT_R} fill={C.dotPink} />,
-        <Circle key="pd3" cx={midX + 13} cy={dotY} r={DOT_R} fill={C.dotBlue} />,
+        <Line key="pbar" x1={leftX} y1={barY} x2={rightX} y2={barY}
+          stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />,
+        <Circle key="pd1" cx={midX-13} cy={dotY} r={DOT_R} fill={C.dotBlue} />,
+        <Circle key="pd2" cx={midX}    cy={dotY} r={DOT_R} fill={C.dotPink} />,
+        <Circle key="pd3" cx={midX+13} cy={dotY} r={DOT_R} fill={C.dotBlue} />,
       );
-
-      // Horizontal from bar midpoint to cxMid if offset
       if (Math.abs(midX - cxMid) > 1)
         els.push(<Line key="pbarmid" x1={midX} y1={barY} x2={cxMid} y2={barY}
           stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />);
     }
-
-    // Vertical down + arrow touching center top
     els.push(
       <Line key="pdown" x1={cxMid} y1={barY} x2={cxMid} y2={cTop}
         stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />,
@@ -509,11 +499,9 @@ function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren 
 
   // ── Center → Children ────────────────────────────────────────────────────
   if (visibleChildren.length > 0) {
-    // Bar sits 45% of the way from center bottom to child card top
     const barY  = cBot + (CHILDREN_CARD_Y - cBot) * 0.45;
-    const dotY  = barY + DOT_BELOW;  // dots BELOW bar
+    const dotY  = barY + DOT_BELOW;
 
-    // Hollow circle at center bottom
     els.push(
       <Circle key="ccirc" cx={cxMid} cy={cBot} r={5}
         fill={C.bg} stroke={C.connector} strokeWidth={1.8} />,
@@ -529,29 +517,23 @@ function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren 
     const rightX  = Math.max(...childXMids);
     const barMidX = (leftX + rightX) / 2;
 
-    // Horizontal from cxMid to bar midpoint if needed
     if (Math.abs(barMidX - cxMid) > 1)
       els.push(<Line key="chmidbar" x1={cxMid} y1={barY} x2={barMidX} y2={barY}
         stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />);
-
     if (visibleChildren.length > 1)
       els.push(<Line key="chbar" x1={leftX} y1={barY} x2={rightX} y2={barY}
         stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />);
 
-    // Child count dots BELOW bar
-    const totalDots  = allChildren.length;
+    // Child count dots BELOW bar — all allChildren, focused = bold ring
     const dotSpacing = 16;
-    const dotsStartX = barMidX - ((totalDots - 1) * dotSpacing) / 2;
-
+    const dotsStartX = barMidX - ((allChildren.length - 1) * dotSpacing) / 2;
     allChildren.forEach((cid, idx) => {
       const child    = PEOPLE[cid];
       const isFocus  = cid === focusedId;
       const dotColor = child.gender === 'male' ? C.dotBlue : C.dotPink;
       const dimColor = child.gender === 'male' ? C.dotBlueDim : C.dotPinkDim;
       const dotX     = dotsStartX + idx * dotSpacing;
-
       if (isFocus) {
-        // Bold: outer ring + filled inner
         els.push(
           <Circle key={`dotring${idx}`} cx={dotX} cy={dotY} r={7.5}
             fill={C.bg} stroke={dotColor} strokeWidth={2.2} />,
@@ -562,13 +544,11 @@ function RelationshipConnector({ nodes, focusedId, allChildren, visibleChildren 
       }
     });
 
-    // Vertical drops + arrows touching each child card top directly
     visibleChildren.forEach((cid, i) => {
       const cx = childXMids[i];
       els.push(
         <Line key={`chdrop${i}`} x1={cx} y1={barY} x2={cx} y2={CHILDREN_CARD_Y}
           stroke={C.connector} strokeWidth={1.8} strokeLinecap="round" />,
-        // Arrow tip = CHILDREN_CARD_Y (touches card top)
         <Path key={`charrow${i}`}
           d={`M${cx-ARROW_S},${CHILDREN_CARD_Y-ARROW_S*1.2} L${cx},${CHILDREN_CARD_Y} L${cx+ARROW_S},${CHILDREN_CARD_Y-ARROW_S*1.2}`}
           stroke={C.connector} strokeWidth={1.8} fill="none"
@@ -597,6 +577,44 @@ function HeartBadge({ nodes }) {
     <View style={[styles.heartBadge, { left: hx, top: hy }]}>
       <Text style={{ fontSize: 20 }}>❤️</Text>
     </View>
+  );
+}
+
+// ─── Sibling nav arrows ───────────────────────────────────────────────────────
+function SiblingNavArrows({ focusedPersonId, onNavigate }) {
+  const siblings    = useMemo(() => getSiblings(focusedPersonId), [focusedPersonId]);
+  const orderedList = useMemo(() => {
+    const myParents = getParents(focusedPersonId);
+    if (myParents.length === 0) return [];
+    return getChildren(myParents[0]);
+  }, [focusedPersonId]);
+
+  if (siblings.length === 0) return null;
+
+  const focusedIdx  = orderedList.indexOf(focusedPersonId);
+  const prevSibling = focusedIdx > 0 ? orderedList[focusedIdx - 1] : null;
+  const nextSibling = focusedIdx >= 0 && focusedIdx < orderedList.length - 1 ? orderedList[focusedIdx + 1] : null;
+  const arrowY      = CANVAS_H / 2 - 22;
+
+  return (
+    <>
+      {prevSibling && (
+        <TouchableOpacity
+          style={[styles.sibArrow, styles.sibArrowLeft, { top: arrowY }]}
+          onPress={() => onNavigate(prevSibling)} activeOpacity={0.7}
+        >
+          <Text style={styles.sibArrowTxt}>‹</Text>
+        </TouchableOpacity>
+      )}
+      {nextSibling && (
+        <TouchableOpacity
+          style={[styles.sibArrow, styles.sibArrowRight, { top: arrowY }]}
+          onPress={() => onNavigate(nextSibling)} activeOpacity={0.7}
+        >
+          <Text style={styles.sibArrowTxt}>›</Text>
+        </TouchableOpacity>
+      )}
+    </>
   );
 }
 
@@ -640,77 +658,90 @@ function AddHiver() {
   );
 }
 
-
-// ─── Sibling Navigation Arrows ───────────────────────────────────────────────
-// Left ‹ and right › pill arrows, vertically centred on the canvas edges.
-// Cycles through siblings of the current focused person (people sharing parents).
-function SiblingNavArrows({ focusedPersonId, onNavigate }) {
-  const siblings = useMemo(() => getSiblings(focusedPersonId), [focusedPersonId]);
-
-  // Build ordered sibling list using first parent's children order
-  const orderedList = useMemo(() => {
-    const myParents = getParents(focusedPersonId);
-    if (myParents.length === 0) return [];
-    return getChildren(myParents[0]);
-  }, [focusedPersonId]);
-
-  const focusedIdx  = orderedList.indexOf(focusedPersonId);
-  const prevSibling = focusedIdx > 0 ? orderedList[focusedIdx - 1] : null;
-  const nextSibling = focusedIdx >= 0 && focusedIdx < orderedList.length - 1 ? orderedList[focusedIdx + 1] : null;
-
-  // Only show if there are siblings at all
-  if (siblings.length === 0) return null;
-
-  const arrowY = CANVAS_H / 2 - 22; // vertically centred on canvas
-
+// ─── Selection bar ────────────────────────────────────────────────────────────
+function SelectionBar({ count, onClear, onNext }) {
+  if (count === 0) return null;
   return (
-    <>
-      {prevSibling && (
-        <TouchableOpacity
-          style={[styles.sibArrow, styles.sibArrowLeft, { top: arrowY }]}
-          onPress={() => onNavigate(prevSibling)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.sibArrowTxt}>‹</Text>
-        </TouchableOpacity>
-      )}
-      {nextSibling && (
-        <TouchableOpacity
-          style={[styles.sibArrow, styles.sibArrowRight, { top: arrowY }]}
-          onPress={() => onNavigate(nextSibling)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.sibArrowTxt}>›</Text>
-        </TouchableOpacity>
-      )}
-    </>
+    <View style={styles.selBar}>
+      <Text style={styles.selCount}>{count} Selected</Text>
+      <TouchableOpacity onPress={onClear} style={styles.selClearBtn}>
+        <Text style={styles.selClearTxt}>Clear</Text>
+      </TouchableOpacity>
+      <View style={{ flex: 1 }} />
+      <TouchableOpacity onPress={onNext} style={styles.selNextBtn}>
+        <Text style={styles.selNextTxt}>Next  →</Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   const [focusedPersonId, setFocusedPersonId] = useState(initialFocusId);
+  const [childPage, setChildPage]             = useState(0);
+  const [popupPerson, setPopupPerson]         = useState(null);
+  const [selectedIds, setSelectedIds]         = useState(new Set());
 
-  const { nodes, allChildren, children: visibleChildren } = useMemo(
-    () => buildLayout(focusedPersonId), [focusedPersonId],
+  // Reset child page when focus changes
+  useEffect(() => { setChildPage(0); }, [focusedPersonId]);
+
+  const { nodes, allChildren, visibleChildren, totalChildPages } = useMemo(
+    () => buildLayout(focusedPersonId, childPage),
+    [focusedPersonId, childPage],
   );
 
   const handlePress = useCallback((id) => {
     if (id !== focusedPersonId) setFocusedPersonId(id);
   }, [focusedPersonId]);
 
+  const handleLongPress = useCallback((id) => {
+    setPopupPerson(PEOPLE[id]);
+    // Also toggle selection
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
   const renderOrder = useMemo(
     () => Object.entries(nodes).sort((a,b) => a[1].zIndex - b[1].zIndex), [nodes],
   );
 
-  // Determine left/right position for parent and child rows
-  const parentEntries = Object.entries(nodes).filter(([,n]) => n.role === 'parent').sort((a,b) => a[1].x - b[1].x);
-  const childEntries  = Object.entries(nodes).filter(([,n]) => n.role === 'child').sort((a,b) => a[1].x - b[1].x);
+  const parentEntries = Object.entries(nodes).filter(([,n]) => n.role==='parent').sort((a,b) => a[1].x-b[1].x);
+  const childEntries  = Object.entries(nodes).filter(([,n]) => n.role==='child').sort((a,b) => a[1].x-b[1].x);
   const leftParentId  = parentEntries[0]?.[0];
   const leftChildId   = childEntries[0]?.[0];
 
+  // ── Swipe gesture for child row pagination ──────────────────────────────
+  // A horizontal swipe anywhere in the children zone (CHILDREN_BTN_Y to canvas bottom)
+  // slides to next or previous child page. No arrows shown — pure gesture.
+  const swipeStartX = useRef(0);
+  const childSwipePan = useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: (e) => {
+      // Only capture touches in the children zone
+      const y = e.nativeEvent.pageY;
+      return y >= CHILDREN_BTN_Y - 20;
+    },
+    onMoveShouldSetPanResponder: (e, gs) =>
+      Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy),
+    onPanResponderGrant: (e) => {
+      swipeStartX.current = e.nativeEvent.pageX;
+    },
+    onPanResponderRelease: (e, gs) => {
+      const SWIPE_THRESHOLD = 40;
+      if (gs.dx < -SWIPE_THRESHOLD) {
+        // Swipe left → next page
+        setChildPage(p => Math.min(totalChildPages - 1, p + 1));
+      } else if (gs.dx > SWIPE_THRESHOLD) {
+        // Swipe right → prev page
+        setChildPage(p => Math.max(0, p - 1));
+      }
+    },
+  }), [totalChildPages]);
+
   return (
-    <View style={styles.canvas}>
+    <View style={styles.canvas} {...childSwipePan.panHandlers}>
       <RelationshipConnector
         nodes={nodes} focusedId={focusedPersonId}
         allChildren={allChildren} visibleChildren={visibleChildren}
@@ -720,22 +751,22 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
       {renderOrder.map(([id, nd]) => (
         <AnimatedNode key={id} x={nd.x} y={nd.y} zIndex={nd.zIndex} width={nd.w} height={nd.h}>
           <PersonCard
-            person={PEOPLE[id]} nodeData={nd}
+            person={PEOPLE[id]}
             isCenter={id === focusedPersonId}
+            isSelected={selectedIds.has(id)}
             onPress={() => handlePress(id)}
+            onLongPress={() => handleLongPress(id)}
             cardW={nd.w} cardH={nd.h}
           />
         </AnimatedNode>
       ))}
 
-      {/* ⇄ buttons — outside AnimatedNode to avoid clipping */}
+      {/* ⇄ family buttons */}
       {renderOrder.map(([id, nd]) => {
         if (nd.role === 'spouse') return null;
-        // isLeftCard: for parents, leftmost = left; for children, leftmost = left
         const isLeftCard =
           nd.role === 'parent' ? id === leftParentId :
-          nd.role === 'child'  ? id === leftChildId  :
-          true; // center has no left/right concept, handled separately
+          nd.role === 'child'  ? id === leftChildId  : true;
         return (
           <FamilyIndicators
             key={`fi_${id}`}
@@ -747,22 +778,44 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
         );
       })}
 
+
       <Header />
       <SiblingNavArrows focusedPersonId={focusedPersonId} onNavigate={handlePress} />
-      <AddHiver />
+
+      {/* Selection bar replaces AddHiver when items selected */}
+      {selectedIds.size > 0 ? (
+        <SelectionBar
+          count={selectedIds.size}
+          onClear={() => setSelectedIds(new Set())}
+          onNext={() => {}}
+        />
+      ) : (
+        <AddHiver />
+      )}
+
+      {/* Long-press popup */}
+      {popupPerson && (
+        <CardPopup
+          person={popupPerson}
+          focusedId={focusedPersonId}
+          onClose={() => setPopupPerson(null)}
+        />
+      )}
     </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  canvas: { flex: 0.9, width: SW,  overflow: 'hidden' },
+  canvas: { flex: 0.9, width: SW, backgroundColor: C.bg, overflow: 'hidden' },
 
+  // Cards
   card: { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden',
     elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 } },
   cardCenter: { elevation: 12, shadowOpacity: 0.2, shadowRadius: 13,
     shadowOffset: { width: 0, height: 5 } },
+  cardSelected: { borderWidth: 2.5 },
 
   cardTop: { flexDirection: 'row', height: 72 },
   photoWrap: { width: 88, height: '100%', position: 'relative' },
@@ -795,18 +848,32 @@ const styles = StyleSheet.create({
   marriageBand: { flexDirection: 'row', alignItems: 'center', gap: 3,
     borderRadius: 7, paddingHorizontal: 6, paddingVertical: 2, marginTop: 3 },
 
+  // ⇄ buttons
   sideBtn: { position: 'absolute', borderRadius: 9,
     alignItems: 'center', justifyContent: 'center', zIndex: 35,
     elevation: 4, shadowColor: '#000', shadowOpacity: 0.13,
     shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   sideBtnIcon: { color: C.white, fontSize: 15, fontWeight: '700' },
 
+  // Heart
   heartBadge: { position: 'absolute', zIndex: 40,
     alignItems: 'center', justifyContent: 'center' },
 
+  // Child page arrows
+  childPageBtn: {
+    position: 'absolute', width: 32, height: 36, borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.88)', alignItems: 'center',
+    justifyContent: 'center', zIndex: 90, elevation: 5,
+    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+  },
+  childPageTxt: { fontSize: 22, color: C.black, fontWeight: '300', lineHeight: 28 },
+
+  // Header
   header: { position: 'absolute', top: 0, left: 0, width: SW, height: HEADER_H,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 18, 
+    paddingHorizontal: 18, backgroundColor: C.bg,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8DDD0', zIndex: 200 },
   homeBtn: { padding: 3 },
   houseWrap: { alignItems: 'center', width: 26, height: 26 },
@@ -827,33 +894,71 @@ const styles = StyleSheet.create({
   hdrDot: { position: 'absolute', bottom: -1, right: -2, width: 8, height: 8,
     borderRadius: 4, borderWidth: 1.5, borderColor: C.bg },
 
+  // Add Hiver
   addHiverWrap: { position: 'absolute', bottom: 20, left: 0, right: 0,
     alignItems: 'center', zIndex: 100 },
-  addHiverBtn: { flexDirection: 'row', alignItems: 'center'},
+  addHiverBtn: { flexDirection: 'row', alignItems: 'center' },
   plusCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.black,
     alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   plusTxt: { fontSize: 19, color: C.white, fontWeight: '800', lineHeight: 22, marginTop: -1 },
-  addHiverLabel: { color: C.black, fontSize: 17,  letterSpacing: 0.2, fontFamily:'SofiaSansCondensed-Bold' },
+  addHiverLabel: { color: C.black, fontSize: 17, letterSpacing: 0.2, fontFamily: 'SofiaSansCondensed-Bold' },
 
-  // ── Sibling nav arrows ─────────────────────────────────────────────────────
-  sibArrow: {
-    position: 'absolute',
-    width: 36,
-    height: 56,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 90,
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
+  // Sibling nav arrows
+  sibArrow: { position: 'absolute', width: 36, height: 56, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.88)', alignItems: 'center',
+    justifyContent: 'center', zIndex: 90, elevation: 6,
+    shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
+    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
   sibArrowLeft:  { left: 6 },
   sibArrowRight: { right: 6 },
   sibArrowTxt: { fontSize: 32, color: C.black, fontWeight: '300', lineHeight: 38, marginTop: -2 },
+
+  // ── Context popup ────────────────────────────────────────────────────────
+  popupOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  popupCard: {
+    width: SW * 0.82, borderRadius: 20,
+    backgroundColor: C.white, overflow: 'hidden',
+    elevation: 16, shadowColor: '#000', shadowOpacity: 0.25,
+    shadowRadius: 20, shadowOffset: { width: 0, height: 8 },
+  },
+  popupPhotoWrap: { width: '100%', height: 150, position: 'relative' },
+  popupPhoto: { width: '100%', height: '100%', resizeMode: 'cover' },
+  popupCheck: {
+    position: 'absolute', top: 10, right: 10,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: C.teal, alignItems: 'center', justifyContent: 'center',
+  },
+  popupCheckTxt: { color: C.white, fontSize: 16, fontWeight: '800' },
+  popupNameWrap: { backgroundColor: '#EFEFEF', paddingHorizontal: 18, paddingVertical: 12 },
+  popupName:     { fontSize: 18, fontWeight: '800', color: C.text },
+  popupRelation: { fontSize: 13, color: C.sub, marginTop: 2 },
+  popupDivider:  { height: StyleSheet.hairlineWidth, backgroundColor: '#DDD', marginHorizontal: 18 },
+  popupMenuItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 18, paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F0F0F0',
+  },
+  popupMenuIcon:  { fontSize: 18, width: 32, textAlign: 'center' },
+  popupMenuLabel: { fontSize: 15, color: C.text, marginLeft: 10, fontWeight: '500' },
+
+  // ── Selection bar ─────────────────────────────────────────────────────────
+  selBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    height: 54, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.bg, paddingHorizontal: 18,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E0D8CE',
+    zIndex: 100,
+  },
+  selCount:   { fontSize: 16, fontWeight: '700', color: C.text },
+  selClearBtn: { marginLeft: 12, paddingHorizontal: 10, paddingVertical: 4 },
+  selClearTxt: { fontSize: 14, color: C.sub },
+  selNextBtn: {
+    backgroundColor: C.bg, borderWidth: 1, borderColor: C.grayBd,
+    borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8,
+  },
+  selNextTxt: { fontSize: 14, fontWeight: '600', color: C.text },
 });
