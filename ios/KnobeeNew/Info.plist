@@ -28,14 +28,13 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-	  <!-- Do not change NSAllowsArbitraryLoads to true, or you will risk app rejection! -->
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -55,5 +54,26 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>SofiaSansCondensed-MediumItalic.ttf</string>
+		<string>SofiaSansCondensed-LightItalic.ttf</string>
+		<string>SofiaSansCondensed-SemiBold.ttf</string>
+		<string>SofiaSansCondensed-Bold.ttf</string>
+		<string>SofiaSansCondensed-Thin.ttf</string>
+		<string>SofiaSansCondensed-ExtraLightItalic.ttf</string>
+		<string>SofiaSansCondensed-Light.ttf</string>
+		<string>SofiaSansCondensed-Italic.ttf</string>
+		<string>SofiaSansCondensed-Regular.ttf</string>
+		<string>SofiaSansCondensed-BlackItalic.ttf</string>
+		<string>SofiaSansCondensed-SemiBoldItalic.ttf</string>
+		<string>SofiaSansCondensed-ExtraBoldItalic.ttf</string>
+		<string>SofiaSansCondensed-Medium.ttf</string>
+		<string>SofiaSansCondensed-BoldItalic.ttf</string>
+		<string>SofiaSansCondensed-ThinItalic.ttf</string>
+		<string>SofiaSansCondensed-ExtraLight.ttf</string>
+		<string>SofiaSansCondensed-Black.ttf</string>
+		<string>SofiaSansCondensed-ExtraBold.ttf</string>
+	</array>
 </dict>
 </plist>
