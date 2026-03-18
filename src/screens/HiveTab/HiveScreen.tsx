@@ -1,656 +1,571 @@
-import React, { useState, useRef } from 'react';
+/**
+ * HiveScreen — Fixed-canvas family tree viewer (no bottom tabs)
+ *
+ * Dependencies:
+ *   react-native-reanimated  >= 3
+ *   react-native-svg         >= 13
+ */
+
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Image,
-  ScrollView,
   Dimensions,
-  Modal,
-  Animated,
-  Alert,
-  TouchableWithoutFeedback,
+  Image,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
+import Svg, { Line, Path } from 'react-native-svg';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+const CARD_W = 158;
+const CARD_H = 166;
+const DOB_STRIP_H = 32;
+const GAP = 18;
+const SPOUSE_DX = 12;
+const SPOUSE_DY = 10;
 
-type PersonId = string;
+const HEADER_H = Platform.OS === 'ios' ? 100 : 72;
+const CANVAS_H = SH - HEADER_H;
 
-type Person = {
-  id: PersonId;
-  name: string;
-  avatar: string;
-  profession: string;
-  location: string;
-  countryFlag: string;
-  country: string;
-  dob: string;
-  dod?: string;
-  followers: number | string;
-  gender: 'male' | 'female';
-  isDeceased?: boolean;
-  isFollowing?: boolean;
-  // Relations (ids)
-  spouseId?: PersonId;
-  fatherId?: PersonId;
-  motherId?: PersonId;
-  childrenIds?: PersonId[];
-};
+// Row Y positions inside canvas
+const PARENT_Y = 14;
+const FOCUS_Y = PARENT_Y + CARD_H + 68;
+const CHILD_Y = FOCUS_Y + CARD_H + DOB_STRIP_H + 54;
 
-// ─── Family Database ──────────────────────────────────────────────────────────
+const SPRING = { damping: 20, stiffness: 200, mass: 0.85 };
 
-const DB: Record<PersonId, Person> = {
+// ─── Database ─────────────────────────────────────────────────────────────────
+
+const DB = {
   shubham: {
-    id: 'shubham', name: 'Shubham Seth', avatar: 'https://i.pravatar.cc/150?img=70',
-    profession: 'Doctor', location: 'Noida, Uttar Pradesh', countryFlag: '🇮🇳', country: 'IN',
-    dob: 'Jan 15, 1960', dod: 'Feb 18, 2026', followers: 3, gender: 'male',
-    isDeceased: true, spouseId: 'maya', childrenIds: ['sandhya'],
+    id: 'shubham', name: 'Shubham Seth',
+    avatar: 'https://i.pravatar.cc/150?img=70',
+    profession: 'Doctor', location: 'Noida, Uttar Pradesh',
+    flag: '🇮🇳', country: 'IN',
+    dob: 'Jan 15, 1960', dod: 'Feb 18, 2026',
+    followers: 3, gender: 'male', isDeceased: true,
+    spouseIds: ['maya'], childrenIds: ['sandhya'],
+    fatherId: null, motherId: null,
   },
   maya: {
-    id: 'maya', name: 'Maya Seth', avatar: 'https://i.pravatar.cc/150?img=47',
-    profession: 'Housewife', location: 'Noida, Uttar Pradesh', countryFlag: '🇮🇳', country: 'IN',
-    dob: 'March 11, 1968', followers: 15, gender: 'female',
-    spouseId: 'shubham', childrenIds: ['sandhya'],
+    id: 'maya', name: 'Maya Seth',
+    avatar: 'https://i.pravatar.cc/150?img=47',
+    profession: 'Housewife', location: 'Noida, Uttar Pradesh',
+    flag: '🇮🇳', country: 'IN',
+    dob: 'March 11, 1968',
+    followers: 15, gender: 'female',
+    spouseIds: ['shubham'], childrenIds: ['sandhya'],
+    fatherId: null, motherId: null,
   },
   sandhya: {
-    id: 'sandhya', name: 'Sandhya Kohli', avatar: 'https://i.pravatar.cc/150?img=44',
-    profession: 'Doctor', location: 'Noida, Uttar Pradesh', countryFlag: '🇮🇳', country: 'IN',
-    dob: 'March 11, 1968', followers: 245, gender: 'female',
+    id: 'sandhya', name: 'Sandhya Kohli',
+    avatar: 'https://i.pravatar.cc/150?img=44',
+    profession: 'Doctor', location: 'Noida, Uttar Pradesh',
+    flag: '🇮🇳', country: 'IN',
+    dob: 'March 11, 1990',
+    followers: 245, gender: 'female',
     fatherId: 'shubham', motherId: 'maya',
-    spouseId: 'vikram',
+    spouseIds: ['vikram'],
     childrenIds: ['raghav', 'shruti'],
   },
   vikram: {
-    id: 'vikram', name: 'Vikram Kohli', avatar: 'https://i.pravatar.cc/150?img=15',
-    profession: 'Engineer', location: 'Noida, Uttar Pradesh', countryFlag: '🇮🇳', country: 'IN',
-    dob: 'June 5, 1965', followers: 89, gender: 'male',
-    spouseId: 'sandhya', childrenIds: ['raghav', 'shruti'],
+    id: 'vikram', name: 'Vikram Kohli',
+    avatar: 'https://i.pravatar.cc/150?img=15',
+    profession: 'Engineer', location: 'Noida, Uttar Pradesh',
+    flag: '🇮🇳', country: 'IN',
+    dob: 'June 5, 1988',
+    followers: 89, gender: 'male',
+    spouseIds: ['sandhya'], childrenIds: ['raghav', 'shruti'],
+    fatherId: null, motherId: null,
   },
   raghav: {
-    id: 'raghav', name: 'Raghav Kohli', avatar: 'https://i.pravatar.cc/150?img=12',
-    profession: 'Student (BBA)', location: 'Bangalore', countryFlag: '🇮🇳', country: 'IN',
-    dob: 'February 19, 1998', followers: 842, gender: 'male',
-    isFollowing: true,
+    id: 'raghav', name: 'Raghav Kohli',
+    avatar: 'https://i.pravatar.cc/150?img=12',
+    profession: 'Student (BBA)', location: 'Bangalore',
+    flag: '🇮🇳', country: 'IN',
+    dob: 'February 19, 1998',
+    followers: 842, gender: 'male', isFollowing: true,
     fatherId: 'vikram', motherId: 'sandhya',
+    spouseIds: [], childrenIds: [],
   },
   shruti: {
-    id: 'shruti', name: 'Shruti Kohli', avatar: 'https://i.pravatar.cc/150?img=45',
-    profession: 'Student (MBBS)', location: 'Ukraine', countryFlag: '🇺🇦', country: 'UA',
-    dob: 'February 19, 1998', followers: '1K', gender: 'female',
+    id: 'shruti', name: 'Shruti Kohli',
+    avatar: 'https://i.pravatar.cc/150?img=45',
+    profession: 'Student (MBBS)', location: 'Ukraine',
+    flag: '🇺🇦', country: 'UA',
+    dob: 'February 19, 1998',
+    followers: '1K', gender: 'female',
     fatherId: 'vikram', motherId: 'sandhya',
+    spouseIds: [], childrenIds: [],
   },
 };
 
-// ─── Card Component ───────────────────────────────────────────────────────────
+// ─── Layout builder ───────────────────────────────────────────────────────────
 
-type CardProps = {
-  person: Person;
-  isSelected?: boolean;
-  onPress?: () => void;
-  onLongPress?: () => void;
-  width?: number;
-  compact?: boolean;
-};
+function buildLayout(focusId) {
+  const focused = DB[focusId];
+  if (!focused) return [];
+  const nodes = [];
 
-const PersonCard = ({ person, isSelected, onPress, onLongPress, width: cardW = 170, compact }: CardProps) => {
-  const cardBg = person.isDeceased ? '#c8c8c8' : person.gender === 'female' ? '#f7d0ef' : '#d0e8f7';
-  const btnBg = person.isDeceased ? '#888' : person.isFollowing ? '#e0e0e0' : 'rgba(255,167,87,1)';
-  const btnColor = person.isFollowing ? '#888' : '#fff';
-  const btnLabel = person.isDeceased ? 'Deceased' : person.isFollowing ? 'Following' : `+ Follow | ${person.followers}`;
+  // Parents
+  const parentIds = [focused.fatherId, focused.motherId].filter(Boolean);
+  const pTotal = parentIds.length * CARD_W + Math.max(0, parentIds.length - 1) * GAP;
+  const pStartX = (SW - pTotal) / 2;
+  parentIds.forEach((pid, i) => {
+    nodes.push({ id: pid, role: 'parent', x: pStartX + i * (CARD_W + GAP), y: PARENT_Y, zIndex: 5 });
+  });
+
+  // Spouses stacked behind focus
+  const focusX = (SW - CARD_W) / 2;
+  const spouseIds = focused.spouseIds ?? [];
+  spouseIds.forEach((sid, i) => {
+    nodes.push({
+      id: sid, role: 'spouse',
+      x: focusX + (i + 1) * SPOUSE_DX,
+      y: FOCUS_Y + (i + 1) * SPOUSE_DY,
+      zIndex: 8 - i,
+      spouseIndex: i,
+    });
+  });
+  nodes.push({ id: focusId, role: 'focus', x: focusX, y: FOCUS_Y, zIndex: 10 });
+
+  // Children
+  const childIds = focused.childrenIds ?? [];
+  const cTotal = childIds.length * CARD_W + Math.max(0, childIds.length - 1) * GAP;
+  const cStartX = (SW - cTotal) / 2;
+  childIds.forEach((cid, i) => {
+    nodes.push({ id: cid, role: 'child', x: cStartX + i * (CARD_W + GAP), y: CHILD_Y, zIndex: 5 });
+  });
+
+  return nodes;
+}
+
+// ─── SVG Connectors ───────────────────────────────────────────────────────────
+
+function Connectors({ nodes, focusId }) {
+  const focusNode = nodes.find(n => n.id === focusId);
+  if (!focusNode) return null;
+
+  const fCx = focusNode.x + CARD_W / 2;
+  const fTop = focusNode.y;
+  const fBot = focusNode.y + CARD_H;
+
+  const parentNodes = nodes.filter(n => n.role === 'parent');
+  const childNodes = nodes.filter(n => n.role === 'child');
+
+  const parentMidY = fTop - 32;
+  const childMidY = fBot + DOB_STRIP_H + 18;
+
+  const elems = [];
+
+  // Parents → focus
+  if (parentNodes.length === 2) {
+    const lx = parentNodes[0].x + CARD_W / 2;
+    const rx = parentNodes[1].x + CARD_W / 2;
+    const py = parentNodes[0].y + CARD_H;
+    const midX = (lx + rx) / 2;
+    elems.push(<Line key="pl" x1={lx} y1={py} x2={lx} y2={parentMidY} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(<Line key="pr" x1={rx} y1={py} x2={rx} y2={parentMidY} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(<Line key="ph" x1={lx} y1={parentMidY} x2={rx} y2={parentMidY} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(<Line key="pv" x1={midX} y1={parentMidY} x2={fCx} y2={fTop - 1} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(
+      <Path key="parrow"
+        d={`M ${fCx - 5} ${fTop - 9} L ${fCx} ${fTop} L ${fCx + 5} ${fTop - 9}`}
+        stroke="#bbb" strokeWidth={1.5} fill="none" />
+    );
+    // Heart
+    const hcx = midX;
+    const hcy = py + 16;
+    const s = 9;
+    elems.push(
+      <Path key="heart" fill="#ff4d6d" opacity={0.9}
+        d={`M ${hcx} ${hcy + s * 0.35}
+            C ${hcx} ${hcy - s * 0.1}, ${hcx - s * 0.8} ${hcy - s * 0.6}, ${hcx - s * 0.8} ${hcy - s * 0.1}
+            C ${hcx - s * 0.8} ${hcy - s * 0.7}, ${hcx - s * 0.2} ${hcy - s * 1.0}, ${hcx} ${hcy - s * 0.6}
+            C ${hcx + s * 0.2} ${hcy - s * 1.0}, ${hcx + s * 0.8} ${hcy - s * 0.7}, ${hcx + s * 0.8} ${hcy - s * 0.1}
+            C ${hcx + s * 0.8} ${hcy - s * 0.6}, ${hcx} ${hcy - s * 0.1}, ${hcx} ${hcy + s * 0.35} Z`} />
+    );
+  } else if (parentNodes.length === 1) {
+    const px = parentNodes[0].x + CARD_W / 2;
+    const py = parentNodes[0].y + CARD_H;
+    elems.push(<Line key="pv1" x1={px} y1={py} x2={fCx} y2={fTop - 1} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(
+      <Path key="parrow1"
+        d={`M ${fCx - 5} ${fTop - 9} L ${fCx} ${fTop} L ${fCx + 5} ${fTop - 9}`}
+        stroke="#bbb" strokeWidth={1.5} fill="none" />
+    );
+  }
+
+  // Focus → children
+  if (childNodes.length === 1) {
+    const cx = childNodes[0].x + CARD_W / 2;
+    const cy = childNodes[0].y;
+    elems.push(<Line key="cv1" x1={fCx} y1={fBot + DOB_STRIP_H + 4} x2={cx} y2={cy - 1} stroke="#bbb" strokeWidth={1.5} />);
+    elems.push(
+      <Path key="carrow1"
+        d={`M ${cx - 5} ${cy - 9} L ${cx} ${cy} L ${cx + 5} ${cy - 9}`}
+        stroke="#bbb" strokeWidth={1.5} fill="none" />
+    );
+  } else if (childNodes.length > 1) {
+    elems.push(<Line key="cfstub" x1={fCx} y1={fBot + DOB_STRIP_H + 4} x2={fCx} y2={childMidY} stroke="#bbb" strokeWidth={1.5} />);
+    const llx = childNodes[0].x + CARD_W / 2;
+    const rrx = childNodes[childNodes.length - 1].x + CARD_W / 2;
+    elems.push(<Line key="ch" x1={llx} y1={childMidY} x2={rrx} y2={childMidY} stroke="#bbb" strokeWidth={1.5} />);
+    childNodes.forEach((cn, i) => {
+      const cx = cn.x + CARD_W / 2;
+      const cy = cn.y;
+      elems.push(<Line key={`cdrop${i}`} x1={cx} y1={childMidY} x2={cx} y2={cy - 1} stroke="#bbb" strokeWidth={1.5} />);
+      elems.push(
+        <Path key={`carrow${i}`}
+          d={`M ${cx - 5} ${cy - 9} L ${cx} ${cy} L ${cx + 5} ${cy - 9}`}
+          stroke="#bbb" strokeWidth={1.5} fill="none" />
+      );
+    });
+  }
+
+  return (
+    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
+      {elems}
+    </Svg>
+  );
+}
+
+// ─── Connector dots ───────────────────────────────────────────────────────────
+
+function ConnDots({ centerX, y }) {
+  return (
+    <View style={{ position: 'absolute', left: centerX - 18, top: y, flexDirection: 'row', gap: 5, zIndex: 15 }}>
+      {['#a8d4f0', '#f0a8d4', '#a8d4f0'].map((c, i) => (
+        <View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
+      ))}
+    </View>
+  );
+}
+
+// ─── Animated Node ────────────────────────────────────────────────────────────
+
+function AnimatedNode({ nodeData, onPress }) {
+  const person = DB[nodeData.id];
+  if (!person) return null;
+
+  const ax = useSharedValue(nodeData.x);
+  const ay = useSharedValue(nodeData.y);
+  const aScale = useSharedValue(nodeData.role === 'focus' ? 1.0 : 0.95);
+  const aOpacity = useSharedValue(
+    nodeData.role === 'spouse' ? Math.max(0.5, 1 - (nodeData.spouseIndex ?? 0) * 0.2) : 1
+  );
+
+  useEffect(() => {
+    ax.value = withSpring(nodeData.x, SPRING);
+    ay.value = withSpring(nodeData.y, SPRING);
+    aScale.value = withSpring(nodeData.role === 'focus' ? 1.0 : 0.95, SPRING);
+    aOpacity.value = withSpring(
+      nodeData.role === 'spouse' ? Math.max(0.5, 1 - (nodeData.spouseIndex ?? 0) * 0.2) : 1,
+      SPRING
+    );
+  }, [nodeData.x, nodeData.y, nodeData.role, nodeData.spouseIndex]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    zIndex: nodeData.zIndex,
+    transform: [
+      { translateX: ax.value },
+      { translateY: ay.value },
+      { scale: aScale.value },
+    ],
+    opacity: aOpacity.value,
+  }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <PersonCard person={person} role={nodeData.role} onPress={onPress} />
+    </Animated.View>
+  );
+}
+
+// ─── Person Card ──────────────────────────────────────────────────────────────
+
+function PersonCard({ person, role, onPress }) {
+  const isDeceased = !!person.isDeceased;
+  const isFemale = person.gender === 'female';
+  const isFocus = role === 'focus';
+
+  const cardBg = isDeceased ? '#c4c4c4' : isFemale ? '#f9d8f6' : '#d6edf8';
+  const borderColor = isDeceased ? '#aaa' : isFemale ? '#dda8d8' : '#8cc4e8';
+  const btnBg = isDeceased ? '#888' : person.isFollowing ? '#e2e2e2' : '#ff9a3c';
+  const btnTextColor = !isDeceased && person.isFollowing ? '#666' : '#fff';
+  const btnLabel = isDeceased
+    ? 'Deceased'
+    : person.isFollowing
+    ? 'Following'
+    : `+ Follow | ${person.followers}`;
 
   return (
     <TouchableOpacity
-      activeOpacity={0.85}
+      activeOpacity={0.82}
       onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={400}
-      style={[styles.card, { width: cardW, backgroundColor: cardBg }, isSelected && styles.cardSelected]}
+      style={[cds.card, { backgroundColor: cardBg, borderColor }, isFocus && cds.cardFocus]}
     >
-      {isSelected && (
-        <View style={styles.selTick}><Text style={styles.selTickText}>✓</Text></View>
-      )}
-      <View style={styles.cardTop}>
+      <View style={cds.top}>
         <View>
-          <Image source={{ uri: person.avatar }} style={[styles.cardAvatar, compact && { width: 52, height: 62 }]} />
-          <View style={styles.follBadge}><Text style={styles.follBadgeText}>{person.followers}</Text></View>
+          <Image source={{ uri: person.avatar }} style={cds.photo} resizeMode="cover" />
+          <View style={cds.badge}><Text style={cds.badgeTxt}>{person.followers}</Text></View>
         </View>
-        <View style={styles.cardTopRight}>
-          <Text style={[styles.cardName, compact && { fontSize: 12 }]} numberOfLines={2}>{person.name}</Text>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: btnBg }]} activeOpacity={0.8}>
-            <Text style={[styles.actionBtnText, { color: btnColor }]} numberOfLines={1}>{btnLabel}</Text>
-          </TouchableOpacity>
+        <View style={cds.topRight}>
+          <Text style={cds.name} numberOfLines={2}>{person.name}</Text>
+          <View style={[cds.btn, { backgroundColor: btnBg }]}>
+            <Text style={[cds.btnTxt, { color: btnTextColor }]} numberOfLines={1}>{btnLabel}</Text>
+          </View>
         </View>
       </View>
-      <View style={styles.cardDivider} />
-      <View style={styles.cardBottom}>
-        <Text style={styles.cardProf} numberOfLines={1}>{person.profession}</Text>
-        <View style={styles.cardLocRow}>
-          <Text style={styles.cardLoc} numberOfLines={1}>{person.location}</Text>
-          <Text style={styles.cardFlag}>{person.countryFlag} {person.country}</Text>
+      <View style={[cds.divider, { backgroundColor: borderColor + '55' }]} />
+      <View style={cds.bottom}>
+        <Text style={cds.profession} numberOfLines={1}>{person.profession}</Text>
+        <View style={cds.locRow}>
+          <Text style={cds.loc} numberOfLines={1}>{person.location}</Text>
+          <Text style={cds.flag}>{person.flag} {person.country}</Text>
         </View>
-        <View style={styles.cardDobRow}>
-          <Text style={styles.dobIcon}>🎂</Text>
-          <Text style={styles.cardDob}>{person.dob}</Text>
+        <View style={cds.dobRow}>
+          <Text style={cds.dobIcon}>🎂</Text>
+          <Text style={cds.dob}>
+            {isDeceased ? `${person.dob} - ${person.dod}` : person.dob}
+          </Text>
         </View>
-        {person.dod && (
-          <View style={styles.cardDobRow}>
-            <Text style={styles.dobIcon}>🕊️</Text>
-            <Text style={styles.cardDob}>{person.dod}</Text>
-          </View>
-        )}
       </View>
     </TouchableOpacity>
   );
-};
+}
 
-// ─── Small initial badge (when person has no avatar in relation) ──────────────
+const cds = StyleSheet.create({
+  card: {
+    width: CARD_W, borderRadius: 14, borderWidth: 1.2,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.10, shadowRadius: 7, elevation: 3, overflow: 'hidden',
+  },
+  cardFocus: { shadowOpacity: 0.16, shadowRadius: 12, elevation: 6 },
+  top: { flexDirection: 'row', padding: 10, gap: 8 },
+  photo: { width: 62, height: 74, borderRadius: 10, backgroundColor: '#ddd' },
+  badge: {
+    position: 'absolute', bottom: 2, right: 2,
+    backgroundColor: 'rgba(0,0,0,0.56)', borderRadius: 6,
+    paddingHorizontal: 4, paddingVertical: 1,
+  },
+  badgeTxt: { color: '#fff', fontSize: 9, fontWeight: '600' },
+  topRight: { flex: 1, justifyContent: 'space-between' },
+  name: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', lineHeight: 19 },
+  btn: { borderRadius: 16, paddingHorizontal: 8, paddingVertical: 5, marginTop: 4 },
+  btnTxt: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  divider: { height: 0.7, marginHorizontal: 10 },
+  bottom: { padding: 10, paddingTop: 6, gap: 2 },
+  profession: { fontSize: 12, color: '#555', fontWeight: '500' },
+  locRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  loc: { fontSize: 10.5, color: '#777', flex: 1 },
+  flag: { fontSize: 10.5, color: '#777' },
+  dobRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  dobIcon: { fontSize: 11 },
+  dob: { fontSize: 10.5, color: '#888' },
+});
 
-const InitialBadge = ({ person, onPress }: { person: Person; onPress: () => void }) => (
-  <TouchableOpacity onPress={onPress} style={[styles.initBadge, { backgroundColor: person.gender === 'female' ? '#f7d0ef' : '#d0e8f7' }]}>
-    <Text style={styles.initBadgeText}>{person.name.charAt(0)}</Text>
-  </TouchableOpacity>
-);
+// ─── DOB strips ───────────────────────────────────────────────────────────────
 
-// ─── Context Menu ─────────────────────────────────────────────────────────────
-
-const ContextMenu = ({ person, visible, onClose }: { person: Person | null; visible: boolean; onClose: () => void }) => {
-  if (!person) return null;
+function DobStrips({ nodes }) {
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={cm.overlay}>
-          <TouchableWithoutFeedback>
-            <View style={cm.menu}>
-              <View style={cm.header}>
-                <Image source={{ uri: person.avatar }} style={cm.avatar} />
-                <View>
-                  <Text style={cm.name}>{person.name}</Text>
-                  <Text style={cm.relation}>Family Member</Text>
-                </View>
-              </View>
-              {[
-                { icon: '➕', label: 'Add Hiver' },
-                { icon: '👤', label: 'Profile' },
-                { icon: '💬', label: 'Chattrz' },
-                { icon: '📖', label: 'Diaries' },
-                { icon: '🚫', label: 'Block' },
-              ].map((item, i, arr) => (
-                <TouchableOpacity key={i} style={[cm.item, i < arr.length - 1 && cm.itemBorder]} onPress={() => { onClose(); Alert.alert(item.label); }}>
-                  <Text style={cm.icon}>{item.icon}</Text>
-                  <Text style={[cm.label, item.label === 'Block' && cm.labelRed]}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
+    <>
+      {nodes
+        .filter(n => (n.role === 'focus' || n.role === 'child') && !DB[n.id]?.isDeceased)
+        .map(n => {
+          const p = DB[n.id];
+          if (!p) return null;
+          return (
+            <View key={`dob-${n.id}`} style={{
+              position: 'absolute',
+              left: n.x, top: n.y + CARD_H + 4,
+              width: CARD_W, zIndex: n.zIndex + 1,
+              flexDirection: 'row', alignItems: 'center',
+              backgroundColor: '#d6edf8', borderRadius: 10,
+              paddingHorizontal: 10, paddingVertical: 6, gap: 6,
+            }}>
+              <Text style={{ fontSize: 13 }}>🎂</Text>
+              <Text style={{ fontSize: 12, color: '#445', fontWeight: '500' }} numberOfLines={1}>{p.dob}</Text>
             </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+          );
+        })}
+    </>
   );
-};
+}
 
-const cm = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 },
-  menu: { backgroundColor: '#f0f0f0', borderRadius: 16, width: '100%', overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 14, backgroundColor: '#e4e4e4' },
-  avatar: { width: 64, height: 64, borderRadius: 10 },
-  name: { fontSize: 18, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
-  relation: { fontSize: 13, fontFamily: 'SofiaSansCondensed-Regular', color: '#888', marginTop: 2 },
-  item: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 13, gap: 14, backgroundColor: '#fff' },
-  itemBorder: { borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' },
-  icon: { fontSize: 18, width: 26 },
-  label: { fontSize: 16, fontFamily: 'SofiaSansCondensed-Regular', color: '#1a1a1a' },
-  labelRed: { color: '#e03131' },
-});
+// ─── Side shortcut buttons ────────────────────────────────────────────────────
 
-// ─── Selection Bar ────────────────────────────────────────────────────────────
-
-const SelectionBar = ({ selected, onClear, onNext }: { selected: Person[]; onClear: () => void; onNext: () => void }) => (
-  <View style={sb.wrap}>
-    <View style={sb.topRow}>
-      <Text style={sb.count}>{selected.length} Selected</Text>
-      <TouchableOpacity onPress={onClear}><Text style={sb.clear}>Clear</Text></TouchableOpacity>
-      <TouchableOpacity style={sb.nextBtn} onPress={onNext}>
-        <Text style={sb.nextTxt}>Next →</Text>
-      </TouchableOpacity>
-    </View>
-    {selected.map(p => (
-      <View key={p.id} style={sb.row}>
-        <View style={sb.check}><Text style={sb.checkTxt}>✓</Text></View>
-        <Image source={{ uri: p.avatar }} style={sb.avatar} />
-        <Text style={sb.name}>{p.name}</Text>
-      </View>
-    ))}
-  </View>
-);
-
-const sb = StyleSheet.create({
-  wrap: { backgroundColor: '#f0f0f0', paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 0.5, borderTopColor: '#ddd' },
-  topRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  count: { flex: 1, fontSize: 16, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
-  clear: { fontSize: 14, color: '#666', marginRight: 14, fontFamily: 'SofiaSansCondensed-Regular' },
-  nextBtn: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: '#fff' },
-  nextTxt: { fontSize: 14, fontFamily: 'SofiaSansCondensed-Regular', color: '#1a1a1a' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
-  check: { width: 22, height: 22, borderRadius: 5, backgroundColor: 'rgba(255,167,87,1)', justifyContent: 'center', alignItems: 'center' },
-  checkTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  avatar: { width: 44, height: 44, borderRadius: 8 },
-  name: { fontSize: 16, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
-});
-
-// ─── VLine helper ─────────────────────────────────────────────────────────────
-
-const VLine = ({ h = 36 }: { h?: number }) => (
-  <View style={{ width: 1, height: h, backgroundColor: '#999', alignSelf: 'center' }} />
-);
-
-const Arrow = () => <Text style={{ fontSize: 16, color: '#999', alignSelf: 'center', lineHeight: 20 }}>↓</Text>;
-
-const ConnDots = () => (
-  <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginVertical: 4 }}>
-    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#a0c8e8' }} />
-    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#e8a0c8' }} />
-    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#a0c8e8' }} />
-  </View>
-);
-
-// ─── HiveScreen ───────────────────────────────────────────────────────────────
-
-const CARD_W = 168;
-const SPOUSE_PEEK = 50; // how many px of spouse card peeks out
-
-const HiveScreen = ({ navigation }: { navigation?: any }) => {
-  const [focusId, setFocusId] = useState<PersonId>('sandhya');
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<PersonId[]>([]);
-  const [contextPerson, setContextPerson] = useState<Person | null>(null);
-  const [showContext, setShowContext] = useState(false);
-
-  const focused = DB[focusId] ?? DB['sandhya']; // fallback to root if id not found
-  const father = focused?.fatherId && DB[focused.fatherId] ? DB[focused.fatherId] : null;
-  const mother = focused?.motherId && DB[focused.motherId] ? DB[focused.motherId] : null;
-  const spouse = focused?.spouseId && DB[focused.spouseId] ? DB[focused.spouseId] : null;
-  const children = (focused?.childrenIds ?? []).map(id => DB[id]).filter((p): p is Person => !!p);
-
-  // ── Navigate: tap another card to make them the focus ──
-  const navigateTo = (id: PersonId) => {
-    if (!DB[id]) return; // guard: don't navigate to unknown ids
-    if (selectMode) { toggleSelect(id); return; }
-    setFocusId(id);
-  };
-
-  const handleLongPress = (id: PersonId) => {
-    if (!DB[id]) return;
-    if (!selectMode) setSelectMode(true);
-    toggleSelect(id);
-  };
-
-  const toggleSelect = (id: PersonId) => {
-    setSelectedIds(prev => {
-      const next = prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id];
-      if (next.length === 0) setSelectMode(false);
-      return next;
-    });
-  };
-
-  const clearSelect = () => { setSelectedIds([]); setSelectMode(false); };
-
-  const openContext = (person: Person) => {
-    if (!person) return;
-    if (selectMode) { toggleSelect(person.id); return; }
-    setContextPerson(person);
-    setShowContext(true);
-  };
-
-  const selectedPeople = selectedIds.map(id => DB[id]).filter(Boolean);
-
+function SideButtons({ nodes, focusId, onNavigate }) {
+  const focused = DB[focusId];
   if (!focused) return null;
+  const focusNode = nodes.find(n => n.id === focusId);
+  if (!focusNode) return null;
 
-  // ── Determine if parents row should show ──
-  const hasParents = !!(father || mother);
-  const hasChildren = children.length > 0;
+  const btnY = focusNode.y + 28;
+
+  const leftItems = [
+    focused.fatherId && { id: focused.fatherId, bg: '#d6edf8' },
+    focused.motherId && { id: focused.motherId, bg: '#f9d8f6' },
+  ].filter(Boolean);
+
+  const rightItems = (focused.spouseIds ?? []).map(sid => ({
+    id: sid, bg: DB[sid]?.gender === 'female' ? '#f9d8f6' : '#d6edf8',
+  }));
 
   return (
-    <View style={hv.container}>
+    <>
+      <View style={{ position: 'absolute', left: 8, top: btnY, zIndex: 20, gap: 8 }}>
+        {leftItems.map(item => (
+          <TouchableOpacity key={item.id}
+            style={[sbs.btn, { backgroundColor: item.bg }]}
+            onPress={() => onNavigate(item.id)}>
+            <Text style={sbs.icon}>↩</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={{ position: 'absolute', right: 8, top: btnY, zIndex: 20, gap: 8 }}>
+        {rightItems.map(item => (
+          <TouchableOpacity key={item.id}
+            style={[sbs.btn, { backgroundColor: item.bg }]}
+            onPress={() => onNavigate(item.id)}>
+            <Text style={sbs.icon}>↩</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </>
+  );
+}
+
+const sbs = StyleSheet.create({
+  btn: {
+    width: 36, height: 36, borderRadius: 10,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08, shadowRadius: 3, elevation: 2,
+  },
+  icon: { fontSize: 16, color: '#555' },
+});
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
+export default function HiveScreen({ navigation }) {
+  const [focusedPersonId, setFocusedPersonId] = React.useState('sandhya');
+
+  const nodes = useMemo(() => buildLayout(focusedPersonId), [focusedPersonId]);
+
+  const handlePress = useCallback((nodeData) => {
+    if (nodeData.role === 'focus') return;
+    setFocusedPersonId(nodeData.id);
+  }, []);
+
+  const focusNode = nodes.find(n => n.id === focusedPersonId);
+  const parentNodes = nodes.filter(n => n.role === 'parent');
+  const childNodes = nodes.filter(n => n.role === 'child');
+  const centerX = focusNode ? focusNode.x + CARD_W / 2 : SW / 2;
+
+  const parentDotsY = parentNodes.length > 0 ? parentNodes[0].y + CARD_H + 4 : FOCUS_Y - 45;
+  const childDotsY = focusNode ? focusNode.y + CARD_H + DOB_STRIP_H + 6 : FOCUS_Y + CARD_H + 40;
+
+  return (
+    <View style={hv.root}>
+
       {/* ── Header ── */}
       <View style={hv.header}>
-        <TouchableOpacity onPress={() => navigation?.goBack()} style={hv.hBtn}>
-          <Text style={hv.hIcon}>🏠</Text>
+        <TouchableOpacity style={hv.hBtn} onPress={() => navigation?.goBack()}>
+          <Text style={{ fontSize: 26 }}>🏠</Text>
         </TouchableOpacity>
-        <View style={hv.hRight}>
-          <TouchableOpacity style={hv.hBtn}><Text style={hv.hIcon}>🔍</Text></TouchableOpacity>
-          <TouchableOpacity style={hv.addBtn}>
-            <Text style={hv.addTxt}>+</Text>
-          </TouchableOpacity>
+        <View style={hv.headerCenter}>
+          <View style={hv.chainPill}>
+            <View style={[hv.dot, { backgroundColor: '#a8d4f0' }]} />
+            <Text style={hv.chainIcon}>⛓</Text>
+          </View>
+          <View style={[hv.chainPill, { marginLeft: 8 }]}>
+            <View style={[hv.dot, { backgroundColor: '#f0a8d4' }]} />
+            <Text style={hv.chainIcon}>⛓</Text>
+          </View>
         </View>
+        <TouchableOpacity style={hv.hBtn}>
+          <Text style={{ fontSize: 24 }}>🔍</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* ── Scrollable Tree ── */}
-      <ScrollView
-        style={hv.scroll}
-        contentContainerStyle={hv.scrollContent}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={true}
-      >
+      {/* ── Canvas — fills all remaining height, no scroll ── */}
+      <View style={hv.canvas}>
+        <Connectors nodes={nodes} focusId={focusedPersonId} />
 
-        {/* ═══ GENERATION 1: Parents ═══ */}
-        {hasParents && (
-          <>
-            <View style={hv.parentsRow}>
-              {father ? (
-                <PersonCard
-                  person={father}
-                  isSelected={selectedIds.includes(father.id)}
-                  onPress={() => navigateTo(father.id)}
-                  onLongPress={() => handleLongPress(father.id)}
-                  width={CARD_W}
-                />
-              ) : <View style={{ width: CARD_W }} />}
+        {parentNodes.length > 0 && <ConnDots centerX={centerX} y={parentDotsY} />}
+        {childNodes.length > 0 && focusNode && <ConnDots centerX={centerX} y={childDotsY} />}
 
-              {/* Heart connector */}
-              <View style={hv.heartWrap}>
-                <Text style={hv.heartTxt}>❤️</Text>
-              </View>
+        <DobStrips nodes={nodes} />
 
-              {mother ? (
-                <PersonCard
-                  person={mother}
-                  isSelected={selectedIds.includes(mother.id)}
-                  onPress={() => navigateTo(mother.id)}
-                  onLongPress={() => handleLongPress(mother.id)}
-                  width={CARD_W}
-                />
-              ) : <View style={{ width: CARD_W }} />}
-            </View>
+        {[...nodes]
+          .sort((a, b) => a.zIndex - b.zIndex)
+          .map(n => (
+            <AnimatedNode key={n.id} nodeData={n} onPress={() => handlePress(n)} />
+          ))}
 
-            {/* Connector: parents → focused */}
-            <View style={hv.connBlock}>
-              <ConnDots />
-              {/* Horizontal arms meeting in middle */}
-              <View style={hv.armRow}>
-                <View style={hv.armLeft} />
-                <View style={hv.armRight} />
-              </View>
-              <VLine h={28} />
-              <Arrow />
-            </View>
-          </>
-        )}
-
-        {/* ═══ GENERATION 2: FOCUSED PERSON (center) + SPOUSE peeking behind ═══ */}
-        <View style={hv.focusRow}>
-
-          {/* Left side buttons (from original screenshots — relation shortcuts) */}
-          <View style={hv.sideButtons}>
-            {father && (
-              <TouchableOpacity style={hv.sideBtn} onPress={() => navigateTo(father.id)}>
-                <Text style={hv.sideBtnTxt}>{father.name.charAt(0)}</Text>
-              </TouchableOpacity>
-            )}
-            {mother && (
-              <TouchableOpacity style={[hv.sideBtn, { backgroundColor: '#f7d0ef', marginTop: 8 }]} onPress={() => navigateTo(mother.id)}>
-                <Text style={hv.sideBtnTxt}>{mother.name.charAt(0)}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Focused card + spouse card peeking behind/beside */}
-          <View style={hv.focusWithSpouse}>
-            {/* Spouse card — peeking from behind on the right */}
-            {spouse && (
-              <View style={hv.spousePeek}>
-                <PersonCard
-                  person={spouse}
-                  isSelected={selectedIds.includes(spouse.id)}
-                  onPress={() => navigateTo(spouse.id)}
-                  onLongPress={() => handleLongPress(spouse.id)}
-                  width={CARD_W}
-                />
-              </View>
-            )}
-
-            {/* Focused person card (on top) */}
-            <View style={hv.focusCard}>
-              <PersonCard
-                person={focused}
-                isSelected={selectedIds.includes(focused.id)}
-                onPress={() => openContext(focused)}
-                onLongPress={() => handleLongPress(focused.id)}
-                width={CARD_W}
-              />
-              {/* Extra birthday row shown below focused card (as in screenshots) */}
-              {focused.dob && (
-                <View style={hv.extraDob}>
-                  <Text style={hv.extraDobIcon}>🎂</Text>
-                  <Text style={hv.extraDobTxt}>February 19, 1998</Text>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Right side buttons */}
-          <View style={hv.sideButtons}>
-            {spouse && (
-              <TouchableOpacity style={[hv.sideBtn, { backgroundColor: spouse.gender === 'female' ? '#f7d0ef' : '#d0e8f7' }]} onPress={() => navigateTo(spouse.id)}>
-                <Text style={hv.sideBtnTxt}>{spouse.name.charAt(0)}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* ═══ Connector: focused → children ═══ */}
-        {hasChildren && (
-          <View style={hv.connBlock}>
-            <VLine h={28} />
-            {/* T-split for multiple children */}
-            {children.length > 1 ? (
-              <>
-                <ConnDots />
-                <View style={hv.splitRow}>
-                  <View style={hv.splitLeft} />
-                  <View style={hv.splitRight} />
-                </View>
-                <View style={hv.twoArrows}>
-                  {children.map(() => <Arrow key={Math.random()} />)}
-                </View>
-              </>
-            ) : (
-              <Arrow />
-            )}
-          </View>
-        )}
-
-        {/* ═══ GENERATION 3: Children ═══ */}
-        {hasChildren && (
-          <View style={hv.childrenRow}>
-            {children.map((child, i) => (
-              <React.Fragment key={child.id}>
-                {i > 0 && <View style={{ width: 16 }} />}
-                <View>
-                  <PersonCard
-                    person={child}
-                    isSelected={selectedIds.includes(child.id)}
-                    onPress={() => navigateTo(child.id)}
-                    onLongPress={() => handleLongPress(child.id)}
-                    width={CARD_W}
-                  />
-                  {/* Extra dob strip visible below child card */}
-                  <View style={hv.childExtraDob}>
-                    <Text style={hv.extraDobIcon}>🎂</Text>
-                    <Text style={hv.extraDobTxt}>{child.dob}</Text>
-                  </View>
-                </View>
-              </React.Fragment>
-            ))}
-          </View>
-        )}
+        <SideButtons nodes={nodes} focusId={focusedPersonId} onNavigate={setFocusedPersonId} />
 
         {/* Add Hiver */}
-        <TouchableOpacity style={hv.addHiver} activeOpacity={0.8}>
-          <View style={hv.addHiverCircle}>
-            <Text style={hv.addHiverPlus}>+</Text>
+        <TouchableOpacity
+          style={{ position: 'absolute', bottom: 20, left: SW / 2 - 68, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 30 }}
+          activeOpacity={0.8}
+        >
+          <View style={hv.addCircle}>
+            <Text style={hv.addPlus}>＋</Text>
           </View>
-          <Text style={hv.addHiverTxt}>Add Hiver</Text>
+          <Text style={hv.addTxt}>Add Hiver</Text>
         </TouchableOpacity>
+      </View>
 
-      </ScrollView>
-
-      {/* ── Selection Bar ── */}
-      {selectMode && selectedPeople.length > 0 && (
-        <SelectionBar
-          selected={selectedPeople}
-          onClear={clearSelect}
-          onNext={() => Alert.alert('Next', `${selectedPeople.length} members selected`)}
-        />
-      )}
-
-      {/* ── Context Menu ── */}
-      <ContextMenu
-        person={contextPerson}
-        visible={showContext}
-        onClose={() => setShowContext(false)}
-      />
     </View>
   );
-};
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  card: {
-    borderRadius: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.09,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  cardSelected: { borderWidth: 2.5, borderColor: 'rgba(255,167,87,1)' },
-  selTick: {
-    position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 11,
-    backgroundColor: 'rgba(255,167,87,1)', justifyContent: 'center', alignItems: 'center', zIndex: 10,
-  },
-  selTickText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  cardTop: { flexDirection: 'row', padding: 10, gap: 8 },
-  cardAvatar: { width: 60, height: 70, borderRadius: 8 },
-  follBadge: {
-    position: 'absolute', bottom: 2, right: 2,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
-  },
-  follBadgeText: { color: '#fff', fontSize: 9, fontFamily: 'SofiaSansCondensed-Regular' },
-  cardTopRight: { flex: 1, justifyContent: 'space-between' },
-  cardName: { fontSize: 14, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a', lineHeight: 18 },
-  actionBtn: { borderRadius: 14, paddingHorizontal: 7, paddingVertical: 4, marginTop: 4 },
-  actionBtnText: { fontSize: 10, fontFamily: 'SofiaSansCondensed-Regular', textAlign: 'center' },
-  cardDivider: { height: 0.5, backgroundColor: 'rgba(0,0,0,0.1)', marginHorizontal: 10 },
-  cardBottom: { padding: 10 },
-  cardProf: { fontSize: 12, fontFamily: 'SofiaSansCondensed-Regular', color: '#555', marginBottom: 2 },
-  cardLocRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  cardLoc: { fontSize: 10, fontFamily: 'SofiaSansCondensed-Regular', color: '#777', flex: 1 },
-  cardFlag: { fontSize: 10, fontFamily: 'SofiaSansCondensed-Regular', color: '#777' },
-  cardDobRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  dobIcon: { fontSize: 10 },
-  cardDob: { fontSize: 10, fontFamily: 'SofiaSansCondensed-Regular', color: '#888' },
-  initBadge: {
-    width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
-  },
-  initBadgeText: { fontSize: 18, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
-});
+}
 
 const hv = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#faf6f0' },
+  root: { flex: 1, backgroundColor: '#faf7f2' },
 
-  // Header
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    backgroundColor: '#faf6f0', borderBottomWidth: 0.5, borderBottomColor: '#e8e0d8',
+    height: HEADER_H,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    backgroundColor: '#faf7f2',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#e8ddd4',
   },
   hBtn: { padding: 4 },
-  hIcon: { fontSize: 22 },
-  hRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  addBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: '#1a1a1a',
-    justifyContent: 'center', alignItems: 'center',
+  headerCenter: { flexDirection: 'row', alignItems: 'center' },
+  chainPill: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#ebebeb', borderRadius: 14,
+    paddingHorizontal: 10, paddingVertical: 5,
   },
-  addTxt: { color: '#fff', fontSize: 22, lineHeight: 28, fontWeight: '400' },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 5 },
+  chainIcon: { fontSize: 14, color: '#555' },
 
-  scroll: { flex: 1 },
-  scrollContent: { paddingTop: 28, paddingBottom: 60, alignItems: 'center', paddingHorizontal: 12 },
+  // Canvas fills all space below header
+  canvas: { flex: 1, overflow: 'hidden' },
 
-  // Parents row
-  parentsRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center' },
-  heartWrap: { justifyContent: 'center', paddingHorizontal: 6, paddingTop: 28 },
-  heartTxt: { fontSize: 20 },
-
-  // Connector
-  connBlock: { alignItems: 'center', paddingVertical: 4, width: '100%' },
-  armRow: { flexDirection: 'row', width: CARD_W * 2 + 32, justifyContent: 'center' },
-  armLeft: { width: CARD_W / 2, height: 1, backgroundColor: '#999', marginTop: 0 },
-  armRight: { width: CARD_W / 2, height: 1, backgroundColor: '#999' },
-  splitRow: { flexDirection: 'row', width: CARD_W * 2 + 16, height: 30 },
-  splitLeft: { flex: 1, borderLeftWidth: 1, borderBottomWidth: 1, borderColor: '#999', borderBottomLeftRadius: 4 },
-  splitRight: { flex: 1, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#999', borderBottomRightRadius: 4 },
-  twoArrows: { flexDirection: 'row', width: CARD_W * 2 + 16, justifyContent: 'space-between', paddingHorizontal: CARD_W / 2 - 10 },
-
-  // Focus row
-  focusRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', width: '100%' },
-
-  sideButtons: { width: 44, paddingTop: 20, alignItems: 'center', gap: 8 },
-  sideBtn: {
-    width: 36, height: 36, borderRadius: 8, backgroundColor: '#d0e8f7',
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2,
+  addCircle: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center',
   },
-  sideBtnTxt: { fontSize: 16, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
-
-  // Focused card + spouse peek
-  focusWithSpouse: {
-    position: 'relative',
-    width: CARD_W + SPOUSE_PEEK + 8,
-    alignItems: 'flex-start',
-  },
-  // Spouse card sits behind and to the right, slightly offset down
-  spousePeek: {
-    position: 'absolute',
-    right: 0,
-    top: 12,
-    zIndex: 1,
-    // clip so only right portion peeks out
-    overflow: 'hidden',
-    width: SPOUSE_PEEK + 8,
-    borderRadius: 14,
-    opacity: 0.92,
-  },
-  focusCard: {
-    zIndex: 2,
-    width: CARD_W,
-  },
-
-  // Extra dob strip below focused card (light blue strip in screenshots)
-  extraDob: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#d6eeff', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, marginTop: 6,
-  },
-  extraDobIcon: { fontSize: 12 },
-  extraDobTxt: { fontSize: 12, fontFamily: 'SofiaSansCondensed-Regular', color: '#444' },
-
-  // Children
-  childrenRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-start' },
-  childExtraDob: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: '#d6eeff', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, marginTop: 6,
-    width: CARD_W,
-  },
-
-  // Add Hiver
-  addHiver: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 40, marginBottom: 20 },
-  addHiverCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
-  addHiverPlus: { color: '#fff', fontSize: 22, lineHeight: 28, fontWeight: '400' },
-  addHiverTxt: { fontSize: 18, fontFamily: 'SofiaSansCondensed-Regular', color: '#1a1a1a' },
+  addPlus: { color: '#fff', fontSize: 22, lineHeight: 26 },
+  addTxt: { fontSize: 17, fontWeight: '600', color: '#1a1a1a' },
 });
-
-export default HiveScreen;
