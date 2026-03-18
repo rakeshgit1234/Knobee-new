@@ -20,9 +20,11 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Video from 'react-native-video';
 
 const { width, height } = Dimensions.get('window');
 import StoryViewScreen, { STORY_GROUPS } from './StoryViewScreen';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Comment = {
@@ -36,6 +38,13 @@ type Comment = {
   replies: Comment[];
 };
 
+// mediaAspect controls rendered height:
+//   landscape = 16:9  (~width * 9/16)
+//   portrait  = 9:16  (~width * 16/9, capped)
+//   square    = 1:1
+//   wide      = 2.39:1 cinematic
+type MediaAspect = 'landscape' | 'portrait' | 'square' | 'wide';
+
 type Post = {
   id: string;
   user: string;
@@ -43,7 +52,10 @@ type Post = {
   time: string;
   following: boolean;
   text: string;
-  images: string[];
+  images: string[];          // photo carousel
+  video?: string;            // video URI (react-native-video)
+  videoThumbnail?: string;   // poster shown before playback
+  mediaAspect?: MediaAspect; // controls container height
   views?: string;
   likes: number;
   comments: number;
@@ -88,8 +100,11 @@ const INITIAL_COMMENTS: Comment[] = [
 ];
 
 const POSTS: Post[] = [
+
+  // ── 1. Landscape 16:9 photo carousel ──────────────────────────────────────
   {
-    id: '1', user: 'Mh Kaif', avatar: 'https://i.pravatar.cc/150?img=68',
+    id: '1',
+    user: 'Mh Kaif', avatar: 'https://i.pravatar.cc/150?img=68',
     time: '16 Feb 2024', following: false,
     text: 'Lost in the haze of the motel road, chasing dreams at every crossroad\n#motel #knobee #road',
     images: [
@@ -98,8 +113,11 @@ const POSTS: Post[] = [
       'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=80',
       'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=800&q=80',
     ],
+    mediaAspect: 'landscape',
     views: '999K', likes: 112, comments: 35, shares: 127, type: 'post',
   },
+
+  // ── AD ──────────────────────────────────────────────────────────────────
   {
     id: 'ad1', user: 'Samsung India', avatar: 'https://i.pravatar.cc/150?img=5',
     time: '', following: true,
@@ -109,13 +127,309 @@ const POSTS: Post[] = [
     adTitle: 'Galaxy AI✦ is here', adSubtitle: 'Now also available on\nGalaxy S23 Series',
     adBrand: 'Samsung India', adCta: 'Shop Now',
   },
+
+  // ── 2. Text-only post ─────────────────────────────────────────────────────
   {
-    id: '2', user: 'Mohan Vijay', avatar: 'https://i.pravatar.cc/150?img=70',
+    id: '2',
+    user: 'Mohan Vijay', avatar: 'https://i.pravatar.cc/150?img=70',
     time: '16 Feb 2024', following: true,
-    text: `Beneath the stars, dreams take flight,\nWhispers of the moonlit night.\nMountains high and rivers wide,\nHearts entwined, a gentle tide.\nIn the forest, shadows dance,\nNature's song, a sweet romance.\nHand in hand, we find our place,\nIn the universe, a trace.`,
-    images: [], likes: 112, comments: 35, shares: 127, type: 'post',
+    text: 'Beneath the stars, dreams take flight,\nWhispers of the moonlit night.\nMountains high and rivers wide,\nHearts entwined, a gentle tide.\n\nIn the forest, shadows dance,\nNature\'s song, a sweet romance.\n#poetry #night #nature',
+    images: [], likes: 89, comments: 22, shares: 14, type: 'post',
   },
+
+  // ── 3. Portrait 9:16 video (Reel / Short style) ───────────────────────────
+  {
+    id: '3',
+    user: 'Ananya Rao', avatar: 'https://i.pravatar.cc/150?img=47',
+    time: '14 Mar 2024', following: false,
+    text: 'Golden hour at Marine Drive never gets old 🌅\n#mumbai #goldenhour @marinedrive',
+    images: [],
+    video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1567157577867-05ccb1388e66?w=500&q=80',
+    mediaAspect: 'portrait',
+    views: '2.4M', likes: 4821, comments: 312, shares: 890, type: 'post',
+  },
+
+  // ── 4. Square 1:1 single photo ───────────────────────────────────────────
+  {
+    id: '4',
+    user: 'Priya Kapoor', avatar: 'https://i.pravatar.cc/150?img=45',
+    time: '10 Mar 2024', following: true,
+    text: 'Sunday brunch hits different ☕🥞\n#foodie #brunch #weekendvibes',
+    images: ['https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=800&q=80'],
+    mediaAspect: 'square',
+    likes: 540, comments: 48, shares: 19, type: 'post',
+  },
+
+  // ── 5. Landscape 16:9 video ───────────────────────────────────────────────
+  {
+    id: '5',
+    user: 'Arjun Mehta', avatar: 'https://i.pravatar.cc/150?img=13',
+    time: '8 Mar 2024', following: false,
+    text: 'That drone shot I\'ve been working on for weeks 🚁\n#drone #aerial #cinematography #travel',
+    images: [],
+    video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80',
+    mediaAspect: 'landscape',
+    views: '87K', likes: 1923, comments: 141, shares: 203, type: 'post',
+  },
+
+  // ── 6. Wide cinematic 2.39:1 single photo ────────────────────────────────
+  {
+    id: '6',
+    user: 'Kavya Nair', avatar: 'https://i.pravatar.cc/150?img=44',
+    time: '5 Mar 2024', following: true,
+    text: 'Shot on film. The Ladakh highway at 4AM is pure magic.\n#ladakh #filmphoto #roadtrip @knobee',
+    images: ['https://images.unsplash.com/photo-1501854140801-50d01698950b?w=1200&q=80'],
+    mediaAspect: 'wide',
+    likes: 2104, comments: 98, shares: 312, type: 'post',
+  },
+
+  // ── 7. Square multi-photo carousel (3 images) ────────────────────────────
+  {
+    id: '7',
+    user: 'Siddharth Dev', avatar: 'https://i.pravatar.cc/150?img=15',
+    time: '2 Mar 2024', following: false,
+    text: 'Tokyo > anywhere 🗾\nPart 3 of my Japan series — Shibuya, Akihabara, Shinjuku\n#japan #tokyo #travel #street',
+    images: [
+      'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
+      'https://images.unsplash.com/photo-1490806843957-31f4c9a91c65?w=800&q=80',
+      'https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?w=800&q=80',
+    ],
+    mediaAspect: 'square',
+    views: '44K', likes: 3310, comments: 267, shares: 451, type: 'post',
+  },
+
+  // ── AD 2 ──────────────────────────────────────────────────────────────────
+  {
+    id: 'ad2', user: 'Zomato', avatar: 'https://i.pravatar.cc/150?img=8',
+    time: '', following: false,
+    text: 'Your next craving is just a tap away. 🍕\n#Zomato #OrderNow',
+    images: ['https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80'],
+    mediaAspect: 'landscape',
+    likes: 320, comments: 88, shares: 44, type: 'ad',
+    adTitle: '50% off your first order', adSubtitle: 'Use code KNOBEE50 at checkout',
+    adBrand: 'Zomato', adCta: 'Order Now',
+  },
+
+  // ── 8. Portrait 9:16 photo (story-style) ─────────────────────────────────
+  {
+    id: '8',
+    user: 'Meera Joshi', avatar: 'https://i.pravatar.cc/150?img=46',
+    time: '28 Feb 2024', following: true,
+    text: 'Found this little café in Pondicherry and never left 🌿\n#pondicherry #cafe #slowliving',
+    images: ['https://images.unsplash.com/photo-1600093463592-8e36ae95ef56?w=500&q=80'],
+    mediaAspect: 'portrait',
+    likes: 1780, comments: 94, shares: 67, type: 'post',
+  },
+
+  // ── 9. Portrait 9:16 video (second reel) ─────────────────────────────────
+  {
+    id: '9',
+    user: 'Rohan Das', avatar: 'https://i.pravatar.cc/150?img=12',
+    time: '25 Feb 2024', following: false,
+    text: 'POV: you finally visit Manali in winter ❄️🏔️\n#manali #snowtrip #travel #himalayas @rohandas',
+    images: [],
+    video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=500&q=80',
+    mediaAspect: 'portrait',
+    views: '1.1M', likes: 9240, comments: 703, shares: 1402, type: 'post',
+  },
+
+  // ── 10. Landscape multi-photo + wide mix ──────────────────────────────────
+  {
+    id: '10',
+    user: 'Neha Verma', avatar: 'https://i.pravatar.cc/150?img=44',
+    time: '22 Feb 2024', following: true,
+    text: 'Coorg in one weekend. Rain, coffee, and zero WiFi. Best decision ever.\n#coorg #karnataka #offgrid #weekendtrip',
+    images: [
+      'https://images.unsplash.com/photo-1448375240586-882707db888b?w=800&q=80',
+      'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=800&q=80',
+      'https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?w=800&q=80',
+      'https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?w=800&q=80',
+    ],
+    mediaAspect: 'landscape',
+    views: '55K', likes: 2890, comments: 186, shares: 340, type: 'post',
+  },
+
 ];
+
+// ─── Save Toast ───────────────────────────────────────────────────────────────
+
+type SaveToastProps = {
+  visible: boolean;
+  postImage?: string;
+  onHide: () => void;
+};
+
+const SaveToast = ({ visible, postImage, onHide }: SaveToastProps) => {
+  const slideAnim = useRef(new Animated.Value(100)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 12 }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+
+      const timer = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(slideAnim, { toValue: 100, duration: 300, useNativeDriver: true }),
+          Animated.timing(opacityAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]).start(() => onHide());
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      style={[
+        toastStyles.container,
+        { transform: [{ translateY: slideAnim }], opacity: opacityAnim },
+      ]}
+    >
+      {postImage ? (
+        <Image source={{ uri: postImage }} style={toastStyles.thumbnail} resizeMode="cover" />
+      ) : (
+        <View style={toastStyles.thumbnailPlaceholder}>
+          <Text style={{ fontSize: 18 }}>🔖</Text>
+        </View>
+      )}
+      <View style={toastStyles.textWrap}>
+        <Text style={toastStyles.title}>Post Saved</Text>
+        <Text style={toastStyles.subtitle}>Added to your saved collection</Text>
+      </View>
+      <View style={toastStyles.checkCircle}>
+        <Text style={toastStyles.checkMark}>✓</Text>
+      </View>
+    </Animated.View>
+  );
+};
+
+const toastStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 90,
+    left: 16,
+    right: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 10,
+    zIndex: 9999,
+  },
+  thumbnail: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#333',
+  },
+  thumbnailPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textWrap: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 14,
+    color: '#fff',
+    fontFamily: 'SofiaSansCondensed-Bold',
+    marginBottom: 2,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#aaa',
+    fontFamily: 'SofiaSansCondensed-Regular',
+  },
+  checkCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,167,87,1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkMark: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
+
+// ─── RichText ─────────────────────────────────────────────────────────────────
+
+const RichText = ({
+  text,
+  style,
+  onHashtagPress,
+  onMentionPress,
+}: {
+  text: string;
+  style?: any;
+  onHashtagPress?: (tag: string) => void;
+  onMentionPress?: (user: string) => void;
+}) => {
+  // Split on hashtags and mentions, keeping the delimiters
+  const tokens = text.split(/([@#][\w\u00C0-\u024F]+)/g);
+
+  return (
+    <Text style={style}>
+      {tokens.map((token, i) => {
+        if (token.startsWith('#')) {
+          return (
+            <Text
+              key={i}
+              style={rtStyles.hashtag}
+              onPress={() => onHashtagPress?.(token.slice(1))}
+            >
+              {token}
+            </Text>
+          );
+        }
+        if (token.startsWith('@')) {
+          return (
+            <Text
+              key={i}
+              style={rtStyles.mention}
+              onPress={() => onMentionPress?.(token.slice(1))}
+            >
+              {token}
+            </Text>
+          );
+        }
+        return <Text key={i}>{token}</Text>;
+      })}
+    </Text>
+  );
+};
+
+const rtStyles = StyleSheet.create({
+  hashtag: {
+    color: 'rgba(255,167,87,1)',
+    fontFamily: 'SofiaSansCondensed-Medium',
+  },
+  mention: {
+    color: 'rgba(0,107,165,1)',
+    fontFamily: 'SofiaSansCondensed-Medium',
+  },
+});
 
 // ─── Post Options Sheet ───────────────────────────────────────────────────────
 
@@ -124,27 +438,36 @@ const PostOptionsSheet = ({
 }: {
   visible: boolean; onClose: () => void; onSave: () => void; onShare: () => void;
 }) => {
-  const slideAnim = useRef(new Animated.Value(300)).current;
+  const slideAnim = useRef(new Animated.Value(500)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 70, friction: 13 }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+      ]).start();
     } else {
-      Animated.timing(slideAnim, { toValue: 300, duration: 220, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: 500, duration: 260, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start();
     }
   }, [visible]);
 
   const handleAction = (action: () => void) => {
     onClose();
-    setTimeout(action, 250);
+    setTimeout(action, 260);
   };
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={pos.modalContainer}>
-        <TouchableWithoutFeedback onPress={onClose}>
-          <View style={pos.overlay} />
-        </TouchableWithoutFeedback>
+        <Animated.View style={[pos.overlay, { opacity: backdropAnim }]}>
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={{ flex: 1 }} />
+          </TouchableWithoutFeedback>
+        </Animated.View>
         <Animated.View style={[pos.sheet, { transform: [{ translateY: slideAnim }] }]}>
           <View style={pos.handle} />
           <View style={pos.topRow}>
@@ -160,16 +483,16 @@ const PostOptionsSheet = ({
           </View>
           <View style={pos.sectionGap} />
           <TouchableOpacity style={pos.menuItem} onPress={() => handleAction(() => Alert.alert('About Account', 'Account details coming soon.'))} activeOpacity={0.75}>
-            <View style={pos.menuIconWrap}><Text style={pos.menuIconEmoji}>👤</Text></View>
+            <Image source={require('../../../assets/images/profile/user1.png')} style={pos.topBtnIcon} resizeMode="contain" />
             <Text style={pos.menuItemText}>About Account</Text>
           </TouchableOpacity>
           <TouchableOpacity style={pos.menuItem} onPress={() => handleAction(() => Alert.alert('Blocked', 'User has been blocked.'))} activeOpacity={0.75}>
-            <View style={pos.menuIconWrap}><Text style={pos.menuIconEmoji}>🚫</Text></View>
+            <Image source={require('../../../assets/images/profile/block.png')} style={pos.topBtnIcon} resizeMode="contain" />
             <Text style={pos.menuItemText}>Block User</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[pos.menuItem, pos.menuItemRed, { marginBottom: 60 }]} onPress={() => handleAction(() => Alert.alert('Reported', 'Post has been reported.'))} activeOpacity={0.75}>
-            <View style={pos.menuIconWrap}><Text style={pos.menuIconEmoji}>⚠️</Text></View>
-            <Text style={[pos.menuItemText, pos.menuItemTextRed]}>Report Post</Text>
+            <Image source={require('../../../assets/images/home/warning.png')} style={pos.topBtnIcon} resizeMode="contain" />
+            <Text style={[pos.menuItemText]}>Report Post</Text>
           </TouchableOpacity>
           <View style={pos.bottomSpacer} />
         </Animated.View>
@@ -190,7 +513,7 @@ const pos = StyleSheet.create({
   topBtnText: { fontSize: 15, color: '#1a1a1a', fontFamily: 'SofiaSansCondensed-Regular' },
   sectionGap: { height: 10 },
   menuItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 15, gap: 14, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' },
-  menuItemRed: { backgroundColor: '#fff5f5', borderBottomWidth: 0 },
+  menuItemRed: { backgroundColor: 'rgba(255, 222, 222, 1)', borderBottomWidth: 0 },
   menuIconWrap: { width: 28, alignItems: 'center' },
   menuIconEmoji: { fontSize: 20 },
   menuItemText: { fontSize: 16, color: '#1a1a1a', fontFamily: 'SofiaSansCondensed-Regular' },
@@ -256,7 +579,12 @@ const ReplyRow = ({ reply, onLongPress, onLike, onReply }: ReplyRowProps) => (
     <View style={{ flex: 1 }}>
       <View style={cs.commentBubble}>
         <Text style={cs.commentUser}>{reply.user}</Text>
-        <Text style={cs.commentText}>{reply.text}</Text>
+        <RichText
+          text={reply.text}
+          style={cs.commentText}
+          onHashtagPress={tag => Alert.alert('Hashtag', `#${tag}`)}
+          onMentionPress={user => Alert.alert('Mention', `@${user}`)}
+        />
       </View>
       <View style={cs.commentMeta}>
         <Text style={cs.commentTime}>{reply.time}</Text>
@@ -282,14 +610,21 @@ const CommentSheet = ({ visible, onClose }: { visible: boolean; onClose: () => v
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const [ctxVisible, setCtxVisible] = useState(false);
   const [ctxTarget, setCtxTarget] = useState<{ id: string; parentId?: string } | null>(null);
-  const slideAnim = useRef(new Animated.Value(height)).current;
+  const slideAnim = useRef(new Animated.Value(height * 0.78)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
   const inputRef = useRef<TextInput>(null);
 
   React.useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
+      Animated.parallel([
+        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 70, friction: 13 }),
+        Animated.timing(backdropAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+      ]).start();
     } else {
-      Animated.timing(slideAnim, { toValue: height, duration: 250, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(slideAnim, { toValue: height * 0.78, duration: 260, useNativeDriver: true }),
+        Animated.timing(backdropAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ]).start();
     }
   }, [visible]);
 
@@ -365,7 +700,12 @@ const CommentSheet = ({ visible, onClose }: { visible: boolean; onClose: () => v
       <View style={cs.commentBody}>
         <View style={cs.commentBubble}>
           <Text style={cs.commentUser}>{item.user}</Text>
-          <Text style={cs.commentText}>{item.text}</Text>
+          <RichText
+            text={item.text}
+            style={cs.commentText}
+            onHashtagPress={tag => Alert.alert('Hashtag', `#${tag}`)}
+            onMentionPress={user => Alert.alert('Mention', `@${user}`)}
+          />
         </View>
         <View style={cs.commentMeta}>
           <Text style={cs.commentTime}>{item.time}</Text>
@@ -405,21 +745,18 @@ const CommentSheet = ({ visible, onClose }: { visible: boolean; onClose: () => v
   return (
     <>
       <Modal transparent visible={visible} animationType="none" onRequestClose={onClose} statusBarTranslucent>
-        {/*
-          ── Layout: full-screen column ──
-          Row 1: Pressable backdrop (flex:1, fills all space above the sheet)
-          Row 2: The sheet itself (at the bottom)
-        */}
         <KeyboardAvoidingView
           style={cs.modalContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={0}
         >
-          {/* Backdrop — fills all space above the sheet, tap closes */}
-          <Pressable style={cs.backdrop} onPress={onClose} />
-
-          {/* Sheet — sits at bottom, stops touch propagation to backdrop */}
-          <Pressable style={cs.sheet} onPress={() => { /* consume touch, do nothing */ }}>
+          <Animated.View
+            style={[cs.backdrop, { opacity: backdropAnim }]}
+            pointerEvents={visible ? 'auto' : 'none'}
+          >
+            <Pressable style={{ flex: 1 }} onPress={onClose} />
+          </Animated.View>
+          <Animated.View style={[cs.sheet, { transform: [{ translateY: slideAnim }] }]}>
             <View style={cs.handle} />
             <Text style={cs.sheetTitle}>Comments</Text>
             <FlatList
@@ -457,7 +794,7 @@ const CommentSheet = ({ visible, onClose }: { visible: boolean; onClose: () => v
                 </TouchableOpacity>
               </View>
             </View>
-          </Pressable>
+          </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -473,25 +810,9 @@ const CommentSheet = ({ visible, onClose }: { visible: boolean; onClose: () => v
 };
 
 const cs = StyleSheet.create({
-  // Full-screen column: backdrop on top, sheet at bottom
-  modalContainer: {
-    flex: 1,
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-  },
-  // Backdrop fills all space above the sheet
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  // Sheet sits at bottom
-  sheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: height * 0.78,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
-  },
+  modalContainer: { flex: 1, flexDirection: 'column', justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: height * 0.78, paddingBottom: Platform.OS === 'ios' ? 34 : 16 },
   handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', alignSelf: 'center', marginTop: 10, marginBottom: 4 },
   sheetTitle: { fontSize: 16, textAlign: 'left', paddingVertical: 10, fontFamily: 'SofiaSansCondensed-Bold', marginLeft: 20, borderBottomWidth: 0.5, borderBottomColor: '#f0f0f0' },
   commentListContent: { paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
@@ -522,24 +843,83 @@ const cs = StyleSheet.create({
   sendBtnActive: { color: 'rgba(255,167,87,1)' },
 });
 
+// ─── Animated Like Button ─────────────────────────────────────────────────────
+
+const AnimatedLikeButton = ({
+  liked,
+  likes,
+  onPress,
+}: {
+  liked: boolean;
+  likes: number;
+  onPress: () => void;
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePress = () => {
+    // Bounce animation: shrink then spring back bigger, then settle
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.7, duration: 80, useNativeDriver: true }),
+      Animated.spring(scaleAnim, { toValue: 1.35, useNativeDriver: true, tension: 200, friction: 5 }),
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 8 }),
+    ]).start();
+    onPress();
+  };
+
+  return (
+    <TouchableOpacity style={styles.actionBtn} onPress={handlePress} activeOpacity={0.8}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        {!liked
+          ? <Image source={require('../../../assets/images/home/like.png')} style={styles.actionImg} resizeMode="contain" />
+          : <Image source={require('../../../assets/images/home/likefill.png')} style={[styles.actionImg, { tintColor: '#e8334a' }]} resizeMode="contain" />
+        }
+      </Animated.View>
+      <Text style={styles.actionCount}>{likes}</Text>
+    </TouchableOpacity>
+  );
+};
+
 // ─── Post Actions ─────────────────────────────────────────────────────────────
 
-const PostActions = ({ likes, comments, shares, onComment, onShare }: {
-  likes: number; comments: number; shares: number;
-  onComment: () => void; onShare: () => void;
+const PostActions = ({
+  liked,
+  likeCount,
+  comments,
+  shares,
+  onLike,
+  onComment,
+  onShare,
+  onSave,
+}: {
+  liked: boolean;
+  likeCount: number;
+  comments: number;
+  shares: number;
+  onLike: () => void;
+  onComment: () => void;
+  onShare: () => void;
+  onSave: () => void;
 }) => {
-  const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
+  const saveScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handleSave = () => {
+    if (!saved) {
+      Animated.sequence([
+        Animated.timing(saveScaleAnim, { toValue: 0.7, duration: 80, useNativeDriver: true }),
+        Animated.spring(saveScaleAnim, { toValue: 1.4, useNativeDriver: true, tension: 200, friction: 5 }),
+        Animated.spring(saveScaleAnim, { toValue: 1, useNativeDriver: true, tension: 120, friction: 8 }),
+      ]).start();
+    }
+    setSaved(p => !p);
+    onSave();
+  };
+
   return (
     <View style={styles.postActions}>
       <View style={styles.postActionsLeft}>
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setLiked(p => !p)}>
-          {!liked
-            ? <Image source={require('../../../assets/images/home/like.png')} style={styles.actionImg} resizeMode="contain" />
-            : <Image source={require('../../../assets/images/home/likefill.png')} style={styles.actionImg} resizeMode="contain" />
-          }
-          <Text style={styles.actionCount}>{likes}</Text>
-        </TouchableOpacity>
+        {/* liked/likeCount come from parent — no internal like state here */}
+        <AnimatedLikeButton liked={liked} likes={likeCount} onPress={onLike} />
         <TouchableOpacity style={styles.actionBtn} onPress={onComment}>
           <Image source={require('../../../assets/images/home/comment.png')} style={styles.actionImg} resizeMode="contain" />
           <Text style={styles.actionCount}>{comments}</Text>
@@ -549,11 +929,13 @@ const PostActions = ({ likes, comments, shares, onComment, onShare }: {
           <Text style={styles.actionCount}>{shares}</Text>
         </TouchableOpacity>
       </View>
-      <TouchableOpacity onPress={() => setSaved(p => !p)}>
-        {!saved
-          ? <Image source={require('../../../assets/images/home/save.png')} style={styles.actionImg} resizeMode="contain" />
-          : <Image source={require('../../../assets/images/home/savefill.png')} style={styles.actionImg} resizeMode="contain" />
-        }
+      <TouchableOpacity onPress={handleSave} activeOpacity={0.8}>
+        <Animated.View style={{ transform: [{ scale: saveScaleAnim }] }}>
+          {!saved
+            ? <Image source={require('../../../assets/images/home/save.png')} style={styles.actionImg} resizeMode="contain" />
+            : <Image source={require('../../../assets/images/home/savefill.png')} style={[styles.actionImg, { tintColor: 'rgba(255,167,87,1)' }]} resizeMode="contain" />
+          }
+        </Animated.View>
       </TouchableOpacity>
     </View>
   );
@@ -561,48 +943,329 @@ const PostActions = ({ likes, comments, shares, onComment, onShare }: {
 
 // ─── Ad Card ──────────────────────────────────────────────────────────────────
 
-const AdCard = ({ post, onComment, onShare, onOptions }: {
-  post: Post; onComment: () => void; onShare: () => void; onOptions: () => void;
-}) => (
-  <View style={styles.postCard}>
-    <View style={styles.postHeader}>
-      <Image source={{ uri: post.avatar }} style={styles.postAvatar} />
-      <View style={styles.postUserInfo}>
-        <Text style={styles.postUsername}>{post.adBrand}</Text>
-        <Text style={styles.sponsoredTag}>Sponsored</Text>
+const AdCard = ({
+  post,
+  onComment,
+  onShare,
+  onOptions,
+  onSave,
+}: {
+  post: Post;
+  onComment: () => void;
+  onShare: () => void;
+  onOptions: () => void;
+  onSave: () => void;
+}) => {
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likes);
+
+  const handleLike = () => {
+    setLiked(p => {
+      setLikeCount(c => p ? c - 1 : c + 1);
+      return !p;
+    });
+  };
+
+  return (
+    <View style={styles.postCard}>
+      <View style={styles.postHeader}>
+        <Image source={{ uri: post.avatar }} style={styles.postAvatar} />
+        <View style={styles.postUserInfo}>
+          <Text style={styles.postUsername}>{post.adBrand}</Text>
+          <Text style={styles.sponsoredTag}>Sponsored</Text>
+        </View>
+        <TouchableOpacity style={styles.moreBtn} onPress={onOptions}>
+          <Text style={styles.moreDots}>⋮</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.moreBtn} onPress={onOptions}>
-        <Text style={styles.moreDots}>⋮</Text>
-      </TouchableOpacity>
-    </View>
-    <Text style={styles.postText}>{post.text}</Text>
-    <View style={styles.adVisual}>
-      <Image source={{ uri: post.images[0] }} style={styles.adBgImage} resizeMode="cover" />
-      <View style={styles.adOverlay}>
-        <Text style={styles.adTitle}>{post.adTitle}</Text>
-        <Text style={styles.adSubtitle}>{post.adSubtitle}</Text>
+      <RichText
+        text={post.text}
+        style={styles.postText}
+        onHashtagPress={tag => Alert.alert('Hashtag', `#${tag}`)}
+        onMentionPress={user => Alert.alert('Mention', `@${user}`)}
+      />
+      <View style={styles.adVisual}>
+        <Image source={{ uri: post.images[0] }} style={styles.adBgImage} resizeMode="cover" />
+        <View style={styles.adOverlay}>
+          <Text style={styles.adTitle}>{post.adTitle}</Text>
+          <Text style={styles.adSubtitle}>{post.adSubtitle}</Text>
+        </View>
       </View>
-    </View>
-    <View style={styles.adOfferRow}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.adOfferTitle}>Offer But 1 Get 1 Free</Text>
-        <Text style={styles.adOfferSub}>Galaxy AI now available, buy today till stock ends.</Text>
+      <View style={styles.adOfferRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.adOfferTitle}>Offer But 1 Get 1 Free</Text>
+          <Text style={styles.adOfferSub}>Galaxy AI now available, buy today till stock ends.</Text>
+        </View>
+        <TouchableOpacity style={styles.adCtaBtn}>
+          <Text style={styles.adCtaText}>{post.adCta}</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity style={styles.adCtaBtn}>
-        <Text style={styles.adCtaText}>{post.adCta}</Text>
-      </TouchableOpacity>
+      <PostActions
+        liked={liked}
+        likeCount={likeCount}
+        comments={post.comments}
+        shares={post.shares}
+        onLike={handleLike}
+        onComment={onComment}
+        onShare={onShare}
+        onSave={onSave}
+      />
     </View>
-    <PostActions likes={post.likes} comments={post.comments} shares={post.shares} onComment={onComment} onShare={onShare} />
-  </View>
-);
+  );
+};
+
+// ─── Media height helper ─────────────────────────────────────────────────────
+
+const getMediaHeight = (aspect?: MediaAspect): number => {
+  switch (aspect) {
+    case 'portrait': return Math.min(width * (16 / 9), 520); // 9:16 capped
+    case 'square':   return width;                            // 1:1
+    case 'wide':     return width * (1 / 2.39);              // 2.39:1 cinematic
+    case 'landscape':
+    default:         return width * (9 / 16);                // 16:9
+  }
+};
+
+// ─── Video Player ─────────────────────────────────────────────────────────────
+
+const VideoPlayer = ({
+  uri,
+  thumbnail,
+  aspect,
+  isActive,
+  onDoubleTap,
+}: {
+  uri: string;
+  thumbnail?: string;
+  aspect?: MediaAspect;
+  isActive: boolean;
+  onDoubleTap: () => void;
+}) => {
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+
+  // Auto-play when scrolled into view, pause when out of view
+  React.useEffect(() => {
+    setPlaying(isActive);
+  }, [isActive]);
+  const [progress, setProgress] = useState(0);        // 0-1
+  const [duration, setDuration] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const controlsTimer = useRef<any>(null);
+  const lastTap = useRef(0);
+  const controlsAnim = useRef(new Animated.Value(1)).current;
+
+  const mediaH = getMediaHeight(aspect);
+
+  // Auto-hide controls after 3 s of playing
+  const resetControlsTimer = () => {
+    if (controlsTimer.current) clearTimeout(controlsTimer.current);
+    if (playing) {
+      controlsTimer.current = setTimeout(() => {
+        Animated.timing(controlsAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(
+          () => setShowControls(false)
+        );
+      }, 3000);
+    }
+  };
+
+  const handleTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      onDoubleTap();
+    } else {
+      // Single tap → toggle controls
+      if (!showControls) {
+        setShowControls(true);
+        controlsAnim.setValue(1);
+      } else {
+        // Toggle play/pause
+        setPlaying(p => !p);
+      }
+    }
+    lastTap.current = now;
+    resetControlsTimer();
+  };
+
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={handleTap}
+      style={[vpStyles.container, { height: mediaH }]}
+    >
+      <Video
+        source={{ uri }}
+        style={StyleSheet.absoluteFill}
+        resizeMode={aspect === 'portrait' ? 'cover' : 'cover'}
+        poster={thumbnail}
+        paused={!playing}
+        muted={muted}
+        repeat={true}
+        onProgress={({ currentTime, seekableDuration }) => {
+          setDuration(seekableDuration);
+          setProgress(seekableDuration > 0 ? currentTime / seekableDuration : 0);
+        }}
+        onEnd={() => {
+          setPlaying(false);
+          setProgress(0);
+          setShowControls(true);
+          controlsAnim.setValue(1);
+        }}
+      />
+
+      {/* Gradient overlay for controls readability */}
+      {/* <View style={vpStyles.gradientTop} pointerEvents="none" />
+      <View style={vpStyles.gradientBottom} pointerEvents="none" /> */}
+
+   
+
+    <View style={vpStyles.progressTrack}>
+          <View style={[vpStyles.progressFill, { width: `${progress * 100}%` as any }]} />
+        </View>
+    </TouchableOpacity>
+  );
+};
+
+const vpStyles = StyleSheet.create({
+  container: {
+    width: '100%',
+    backgroundColor: '#000',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  gradientTop: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 60,
+    backgroundColor: 'transparent',
+    // simple fade from black
+    // real gradient needs expo-linear-gradient; we approximate with opacity
+  },
+  gradientBottom: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  centerBtn: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  playIcon: {
+    color: '#fff',
+    fontSize: 24,
+    marginLeft: 4,
+  },
+  controls: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
+  progressTrack: {
+    height: 3,
+    // backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
+    // marginBottom: 8,
+    overflow: 'hidden',
+    position:'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: 'rgba(255,167,87,1)',
+    borderRadius: 2,
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  timeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontFamily: 'SofiaSansCondensed-Regular',
+  },
+  muteBtn: {
+    padding: 2,
+  },
+  muteIcon: {
+    fontSize: 16,
+  },
+});
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
 
-const PostCard = ({ post, onComment, onShare, onOptions }: {
-  post: Post; onComment: () => void; onShare: () => void; onOptions: () => void;
+const PostCard = ({
+  post,
+  activePostId,
+  onComment,
+  onShare,
+  onOptions,
+  onSave,
+}: {
+  post: Post;
+  activePostId: string | null;
+  onComment: () => void;
+  onShare: () => void;
+  onOptions: () => void;
+  onSave: () => void;
 }) => {
   const [following, setFollowing] = useState(post.following);
   const [currentImage, setCurrentImage] = useState(0);
+  const [carouselWidth, setCarouselWidth] = useState(width);
+
+  // ── Double-tap like state ──
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(post.likes);
+  const [doubleTapHeart, setDoubleTapHeart] = useState(false);
+  const lastTapRef = useRef<number>(0);
+  const heartScaleAnim = useRef(new Animated.Value(0)).current;
+  const heartOpacityAnim = useRef(new Animated.Value(0)).current;
+
+  const triggerDoubleTapHeart = () => {
+    setDoubleTapHeart(true);
+    if (!liked) {
+      setLiked(true);
+      setLikeCount(c => c + 1);
+    }
+    // Reset before animating
+    heartScaleAnim.setValue(0);
+    heartOpacityAnim.setValue(1);
+    Animated.sequence([
+      Animated.spring(heartScaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        tension: 150,
+        friction: 5,
+      }),
+      Animated.delay(600),
+      Animated.timing(heartOpacityAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setDoubleTapHeart(false));
+  };
+
+  const handleImageTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      triggerDoubleTapHeart();
+    }
+    lastTapRef.current = now;
+  };
 
   return (
     <View style={styles.postCard}>
@@ -623,17 +1286,81 @@ const PostCard = ({ post, onComment, onShare, onOptions }: {
           <Text style={styles.moreDots}>⋮</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.postText}>{post.text}</Text>
-      {post.images.length > 0 && (
-        <View style={styles.postImageWrapper}>
-          <ScrollView
-            horizontal pagingEnabled showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={e => setCurrentImage(Math.round(e.nativeEvent.contentOffset.x / width))}
-          >
-            {post.images.map((img, idx) => (
-              <Image key={idx} source={{ uri: img }} style={styles.postImage} resizeMode="cover" />
-            ))}
-          </ScrollView>
+      <RichText
+        text={post.text}
+        style={styles.postText}
+        onHashtagPress={tag => Alert.alert('Hashtag', `#${tag}`)}
+        onMentionPress={user => Alert.alert('Mention', `@${user}`)}
+      />
+
+      {/* ── VIDEO ── */}
+      {post.video ? (
+        <View>
+          <VideoPlayer
+            uri={post.video}
+            thumbnail={post.videoThumbnail}
+            aspect={post.mediaAspect}
+            isActive={activePostId === post.id}
+            onDoubleTap={triggerDoubleTapHeart}
+          />
+          {doubleTapHeart && (
+            <View style={pcStyles.heartOverlay} pointerEvents="none">
+              <Animated.Text style={[pcStyles.heartEmoji, { opacity: heartOpacityAnim, transform: [{ scale: heartScaleAnim }] }]}>
+                ❤️
+              </Animated.Text>
+            </View>
+          )}
+          {post.views && (
+            <View style={styles.postViewsBadge}>
+              <Text style={styles.postViews}>👁 {post.views} Views</Text>
+            </View>
+          )}
+        </View>
+      ) : post.images.length > 0 ? (
+        /* ── PHOTO CAROUSEL ── */
+        <View
+          style={[styles.postImageWrapper, { height: getMediaHeight(post.mediaAspect) }]}
+          onLayout={e => setCarouselWidth(e.nativeEvent.layout.width)}
+        >
+          <FlatList
+            data={post.images}
+            keyExtractor={(_, idx) => String(idx)}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            decelerationRate="fast"
+            snapToInterval={carouselWidth}
+            snapToAlignment="start"
+            disableIntervalMomentum
+            getItemLayout={(_, index) => ({
+              length: carouselWidth,
+              offset: carouselWidth * index,
+              index,
+            })}
+            onMomentumScrollEnd={e =>
+              setCurrentImage(Math.round(e.nativeEvent.contentOffset.x / carouselWidth))
+            }
+            renderItem={({ item: img }) => (
+              <Pressable onPress={handleImageTap} style={{ width: carouselWidth }}>
+                <Image
+                  source={{ uri: img }}
+                  style={{ width: carouselWidth, height: getMediaHeight(post.mediaAspect) }}
+                  resizeMode="cover"
+                />
+              </Pressable>
+            )}
+          />
+
+          {/* Double-tap heart overlay */}
+          {doubleTapHeart && (
+            <View style={pcStyles.heartOverlay} pointerEvents="none">
+              <Animated.Text style={[pcStyles.heartEmoji, { opacity: heartOpacityAnim, transform: [{ scale: heartScaleAnim }] }]}>
+                ❤️
+              </Animated.Text>
+            </View>
+          )}
+
           {post.views && (
             <View style={styles.postViewsBadge}>
               <Text style={styles.postViews}>👁 {post.views} Views</Text>
@@ -644,25 +1371,78 @@ const PostCard = ({ post, onComment, onShare, onOptions }: {
               <Text style={styles.photoCountText}>{currentImage + 1}/{post.images.length}</Text>
             </View>
           )}
+
+          {/* Dot indicators */}
+          {post.images.length > 1 && (
+            <View style={pcStyles.dotsRow}>
+              {post.images.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[pcStyles.dot, idx === currentImage && pcStyles.dotActive]}
+                />
+              ))}
+            </View>
+          )}
         </View>
-      )}
-      <PostActions likes={post.likes} comments={post.comments} shares={post.shares} onComment={onComment} onShare={onShare} />
+      ) : null}
+
+      <PostActions
+        liked={liked}
+        likeCount={likeCount}
+        comments={post.comments}
+        shares={post.shares}
+        onLike={() => {
+          setLiked(p => {
+            setLikeCount(c => p ? c - 1 : c + 1);
+            return !p;
+          });
+        }}
+        onComment={onComment}
+        onShare={onShare}
+        onSave={onSave}
+      />
     </View>
   );
 };
 
-// ─── Story ────────────────────────────────────────────────────────────────────
+const pcStyles = StyleSheet.create({
+  heartOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  heartEmoji: {
+    fontSize: 90,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 4 },
+    textShadowRadius: 12,
+  },
+  dotsRow: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+    zIndex: 5,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+  },
+  dotActive: {
+    backgroundColor: '#fff',
+    width: 18,
+    borderRadius: 3,
+  },
+});
 
-// ─── 1. REPLACE the STORIES array at the top of HomeScreen.tsx ────────────────
-//
-// Remove the old STORIES array and import STORY_GROUPS from StoryViewScreen instead:
-//
-//   import StoryViewScreen, { STORY_GROUPS } from '../StoryView/StoryViewScreen';
-//
-// Then remove the old:
-//   const STORIES = [ ... ]
-//
-// ─── 2. REPLACE StoryItem component entirely ──────────────────────────────────
+// ─── Story ────────────────────────────────────────────────────────────────────
 
 const StoryItem = ({
   group,
@@ -676,10 +1456,8 @@ const StoryItem = ({
   <TouchableOpacity
     onPress={() => {
       if (group.isOwn && group.slides.length === 0) {
-        // Own story but no story yet → open gallery to add one
         navigation.navigate('StoryView', { groupIndex, mode: 'crop' });
       } else {
-        // View this person's stories (only their slides, starting at slide 0)
         navigation.navigate('StoryView', { groupIndex, mode: 'view' });
       }
     }}
@@ -689,7 +1467,6 @@ const StoryItem = ({
     <View style={styles.storyRing}>
       <Image source={{ uri: group.userAvatar }} style={styles.storyAvatar} />
       {group.isOwn && (
-        // "+" → open gallery to add a new story slide
         <TouchableOpacity
           onPress={e => {
             e.stopPropagation();
@@ -705,18 +1482,6 @@ const StoryItem = ({
   </TouchableOpacity>
 );
 
-// ─── 3. REPLACE the FlatList in HomeScreen that renders stories ───────────────
-//
-//   <FlatList
-//     data={STORY_GROUPS}
-//     keyExtractor={g => g.userId}
-//     renderItem={({ item, index }) => (
-//       <StoryItem group={item} groupIndex={index} navigation={navigation} />
-//     )}
-//     horizontal showsHorizontalScrollIndicator={false}
-//     contentContainerStyle={styles.storiesList}
-//     style={styles.stories}
-//   />
 // ─── People Card ──────────────────────────────────────────────────────────────
 
 const PeopleCard = ({ person }: { person: typeof PEOPLE_YOU_MAY_KNOW[0] }) => {
@@ -740,84 +1505,159 @@ const PeopleCard = ({ person }: { person: typeof PEOPLE_YOU_MAY_KNOW[0] }) => {
 
 // ─── HomeScreen ───────────────────────────────────────────────────────────────
 
-const HomeScreen = ({ navigation }: { navigation?: any }) => {
-  const [activeTab, setActiveTab] = useState(0);
-  const [commentPostId, setCommentPostId] = useState<string | null>(null);
-  const [optionsPost, setOptionsPost] = useState<Post | null>(null);
+// Build a flat list data structure that interleaves posts, ads, and the
+// "people you may know" section after the first post.
+type FeedItem =
+  | { kind: 'post'; data: Post }
+  | { kind: 'ad';   data: Post }
+  | { kind: 'people' };
 
-  const handleShare = (post: Post) => {
-    Share.share({ message: `${post.text}\n\nShared via KnoBee` });
+const buildFeedItems = (): FeedItem[] => {
+  const items: FeedItem[] = [];
+  POSTS.forEach((post, i) => {
+    items.push({ kind: post.type === 'ad' ? 'ad' : 'post', data: post });
+    if (i === 0) items.push({ kind: 'people' });
+  });
+  return items;
+};
+
+const FEED_ITEMS = buildFeedItems();
+
+const HomeScreen = ({ navigation }: { navigation?: any }) => {
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [optionsPost, setOptionsPost]     = useState<Post | null>(null);
+  const [activePostId, setActivePostId]   = useState<string | null>(null);
+  const [saveToast, setSaveToast]         = useState<{ visible: boolean; image?: string }>({ visible: false });
+
+  const handleShare = (post: Post) => Share.share({ message: `${post.text}\n\nShared via KnoBee` });
+  const handleSave  = (post: Post) => setSaveToast({ visible: true, image: post.images[0] });
+  const hideSaveToast = () => setSaveToast({ visible: false });
+
+  // ── Viewability: mark a post "active" when ≥40% is on screen ──
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 40,
+  }).current;
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    // Find first viewable post that has a video
+    const videoItem = viewableItems.find(
+      (v: any) => v.item?.kind === 'post' && v.item?.data?.video
+    );
+    setActivePostId(videoItem ? videoItem.item.data.id : null);
+  }).current;
+
+  const renderItem = ({ item, index }: { item: FeedItem; index: number }) => {
+    if (item.kind === 'people') {
+      return (
+        <View style={styles.peopleSection}>
+          <Text style={styles.peopleSectionTitle}>People you may know</Text>
+          <FlatList
+            data={PEOPLE_YOU_MAY_KNOW}
+            keyExtractor={p => p.id}
+            renderItem={({ item: p }) => <PeopleCard person={p} />}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.peopleList}
+          />
+        </View>
+      );
+    }
+    if (item.kind === 'ad') {
+      return (
+        <AdCard
+          post={item.data}
+          onComment={() => setCommentPostId(item.data.id)}
+          onShare={() => handleShare(item.data)}
+          onOptions={() => setOptionsPost(item.data)}
+          onSave={() => handleSave(item.data)}
+        />
+      );
+    }
+    return (
+      <PostCard
+        post={item.data}
+        activePostId={activePostId}
+        onComment={() => setCommentPostId(item.data.id)}
+        onShare={() => handleShare(item.data)}
+        onOptions={() => setOptionsPost(item.data)}
+        onSave={() => handleSave(item.data)}
+      />
+    );
   };
+
+  const ListHeader = () => (
+    <>
+      <FlatList
+        data={STORY_GROUPS}
+        keyExtractor={g => g.userId}
+        renderItem={({ item, index }) => (
+          <StoryItem group={item} groupIndex={index} navigation={navigation} />
+        )}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.storiesList}
+        style={styles.stories}
+      />
+      <View style={styles.mindBar}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CreatePost', { isHivePost: false, add: 0 })}
+          style={styles.mindInput}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.mindPlaceholder}>What's in your mind</Text>
+          <Image source={require('../../../assets/images/home/Smiley.png')} style={{ width: 24, height: 24 }} resizeMode="contain" />
+        </TouchableOpacity>
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.safeArea}>
+      {/* Header */}
       <View style={styles.header}>
         <Image source={require('../../../assets/images/logos/logo2.png')} style={{ width: 120, height: 30 }} resizeMode="contain" />
         <View style={styles.headerIcons}>
-          <TouchableOpacity onPress={() => navigation.navigate('CreatePost', { isHivePost: false })} style={styles.headerIconBtn}>
+          <TouchableOpacity onPress={() => navigation.navigate('CreatePost', { isHivePost: false,add:1 })} style={styles.headerIconBtn}>
             <Image source={require('../../../assets/images/home/plus.png')} style={{ width: 28, height: 28 }} resizeMode="contain" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={()=>navigation.navigate('Search')} style={styles.headerIconBtn}>
+          <TouchableOpacity onPress={() => navigation.navigate('Search')} style={styles.headerIconBtn}>
             <Image source={require('../../../assets/images/home/search.png')} style={{ width: 28, height: 28 }} resizeMode="contain" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={()=>navigation.navigate('Notification')} style={styles.headerIconBtn}>
+          <TouchableOpacity onPress={() => navigation.navigate('Notification')} style={styles.headerIconBtn}>
             <Image source={require('../../../assets/images/home/Bell.png')} style={{ width: 28, height: 28 }} resizeMode="contain" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.feed} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 90 }}>
-
-   <FlatList
-    data={STORY_GROUPS}
-    keyExtractor={g => g.userId}
-    renderItem={({ item, index }) => (
-      <StoryItem group={item} groupIndex={index} navigation={navigation} />
-    )}
-    horizontal showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.storiesList}
-    style={styles.stories}
-  />
-        {/* <FlatList
-          data={STORIES} keyExtractor={i => i.id}
-          renderItem={({ item }) => <StoryItem item={item} navigation={navigation} />}
-          horizontal showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.storiesList} style={styles.stories}
-        /> */}
-        <View style={styles.mindBar}>
-          <TouchableOpacity onPress={()=>navigation.navigate('CreatePost', { isHivePost: false, add:1 })} style={styles.mindInput} activeOpacity={0.7}>
-            <Text style={styles.mindPlaceholder}>What's in your mind</Text>
-            <Image source={require('../../../assets/images/home/Smiley.png')} style={{ width: 24, height: 24 }} resizeMode="contain" />
-          </TouchableOpacity>
-        </View>
-        {POSTS.map((post, i) => (
-          <React.Fragment key={post.id}>
-            {post.type === 'ad'
-              ? <AdCard post={post} onComment={() => setCommentPostId(post.id)} onShare={() => handleShare(post)} onOptions={() => setOptionsPost(post)} />
-              : <PostCard post={post} onComment={() => setCommentPostId(post.id)} onShare={() => handleShare(post)} onOptions={() => setOptionsPost(post)} />
-            }
-            {i === 0 && (
-              <View style={styles.peopleSection}>
-                <Text style={styles.peopleSectionTitle}>People you may know</Text>
-                <FlatList
-                  data={PEOPLE_YOU_MAY_KNOW} keyExtractor={p => p.id}
-                  renderItem={({ item }) => <PeopleCard person={item} />}
-                  horizontal showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.peopleList}
-                />
-              </View>
-            )}
-          </React.Fragment>
-        ))}
-      </ScrollView>
+      {/* Feed — single FlatList so onViewableItemsChanged works correctly */}
+      <FlatList
+        data={FEED_ITEMS}
+        keyExtractor={(item, i) =>
+          item.kind === 'people' ? 'people' : item.kind === 'ad' ? item.data.id : item.data.id
+        }
+        renderItem={renderItem}
+        ListHeaderComponent={ListHeader}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 90 }}
+        style={styles.feed}
+        // Viewability for auto-play
+        viewabilityConfig={viewabilityConfig}
+        onViewableItemsChanged={onViewableItemsChanged}
+        // Performance
+        removeClippedSubviews
+        windowSize={5}
+        maxToRenderPerBatch={4}
+        initialNumToRender={4}
+      />
 
       <CommentSheet visible={commentPostId !== null} onClose={() => setCommentPostId(null)} />
       <PostOptionsSheet
         visible={optionsPost !== null}
         onClose={() => setOptionsPost(null)}
-        onSave={() => Alert.alert('Saved', 'Post saved successfully.')}
+        onSave={() => { if (optionsPost) handleSave(optionsPost); }}
         onShare={() => optionsPost && handleShare(optionsPost)}
       />
+      <SaveToast visible={saveToast.visible} postImage={saveToast.image} onHide={hideSaveToast} />
     </View>
   );
 };
@@ -854,8 +1694,8 @@ const styles = StyleSheet.create({
   moreBtn: { padding: 8 },
   moreDots: { fontSize: 20, color: '#888' },
   postText: { fontSize: 14, color: '#222', lineHeight: 20, paddingHorizontal: 14, marginBottom: 10, fontFamily: 'SofiaSansCondensed-Regular' },
-  postImageWrapper: { position: 'relative' },
-  postImage: { width, height: 220 },
+  postImageWrapper: { position: 'relative', overflow: 'hidden' },
+  postImage: { width },
   postViewsBadge: { position: 'absolute', bottom: 16, left: 10 },
   postViews: { backgroundColor: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: 11, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   photoCountBadge: { position: 'absolute', bottom: 16, right: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
