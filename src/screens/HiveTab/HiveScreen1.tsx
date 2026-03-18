@@ -75,6 +75,13 @@ const PEOPLE = {
   kamla: { id:'kamla', name:'Kamla Seth', photo:'https://randomuser.me/api/portraits/women/60.jpg',
     gender:'female', birthDate:'Mar 8, 1935', deathDate:'Nov 14, 2018',
     profession:'Teacher', city:'Allahabad', flag:'🇮🇳', flagCode:'IN', followers:2, isMarried:true },
+  // Sandhya's siblings (children of Shubham & Maya)
+  rohan: { id:'rohan', name:'Rohan Seth', photo:'https://randomuser.me/api/portraits/men/34.jpg',
+    gender:'male', birthDate:'May 20, 1970', deathDate:null,
+    profession:'Software Engineer', city:'Mumbai', flag:'🇮🇳', flagCode:'IN', followers:128, isMarried:true },
+  priya: { id:'priya', name:'Priya Seth', photo:'https://randomuser.me/api/portraits/women/35.jpg',
+    gender:'female', birthDate:'Aug 14, 1972', deathDate:null,
+    profession:'Architect', city:'Pune', flag:'🇮🇳', flagCode:'IN', followers:74, isMarried:false },
 };
 
 const RELATIONSHIPS = [
@@ -83,6 +90,10 @@ const RELATIONSHIPS = [
   { type:'spouse', sourceId:'shubham', targetId:'maya' },
   { type:'parent', sourceId:'shubham', targetId:'sandhya' },
   { type:'parent', sourceId:'maya',    targetId:'sandhya' },
+  { type:'parent', sourceId:'shubham', targetId:'rohan' },
+  { type:'parent', sourceId:'maya',    targetId:'rohan' },
+  { type:'parent', sourceId:'shubham', targetId:'priya' },
+  { type:'parent', sourceId:'maya',    targetId:'priya' },
   { type:'spouse', sourceId:'sandhya', targetId:'arjun' },
   { type:'parent', sourceId:'sandhya', targetId:'raghav' },
   { type:'parent', sourceId:'sandhya', targetId:'shruti' },
@@ -102,10 +113,22 @@ function getChildren(id) {
   return [...new Set(RELATIONSHIPS.filter(r => r.type==='parent' && r.sourceId===id).map(r=>r.targetId))];
 }
 
+// Siblings = people who share at least one parent with id (excluding id itself)
+// Ordered consistently by their first appearance in RELATIONSHIPS children list
+function getSiblings(id) {
+  const myParents = getParents(id);
+  if (myParents.length === 0) return [];
+  const sibSet = new Set();
+  myParents.forEach(pid => {
+    getChildren(pid).forEach(cid => { if (cid !== id) sibSet.add(cid); });
+  });
+  return [...sibSet];
+}
+
 // ─── Layout constants ────────────────────────────────────────────────────────
 const HEADER_H    = 54;
 const CARD_W      = 164;
-const CARD_H      = 162;
+const CARD_H      = 155;
 const H_GAP       = 40;   // wide gap so heart badge fits cleanly between cards
 
 // ⇄ button dimensions
@@ -125,7 +148,7 @@ const USABLE_H    = CANVAS_H - HEADER_H - ADD_HIVER_H;
 
 // Zone heights (30% / 38% / 32%)
 const ZONE_T = USABLE_H * 0.27;
-const ZONE_M = USABLE_H * 0.38;
+const ZONE_M = USABLE_H * 0.36;
 const ZONE_B = USABLE_H * 0.32;
 
 // Parent cards: top of card, centred in zone T
@@ -617,6 +640,53 @@ function AddHiver() {
   );
 }
 
+
+// ─── Sibling Navigation Arrows ───────────────────────────────────────────────
+// Left ‹ and right › pill arrows, vertically centred on the canvas edges.
+// Cycles through siblings of the current focused person (people sharing parents).
+function SiblingNavArrows({ focusedPersonId, onNavigate }) {
+  const siblings = useMemo(() => getSiblings(focusedPersonId), [focusedPersonId]);
+
+  // Build ordered sibling list using first parent's children order
+  const orderedList = useMemo(() => {
+    const myParents = getParents(focusedPersonId);
+    if (myParents.length === 0) return [];
+    return getChildren(myParents[0]);
+  }, [focusedPersonId]);
+
+  const focusedIdx  = orderedList.indexOf(focusedPersonId);
+  const prevSibling = focusedIdx > 0 ? orderedList[focusedIdx - 1] : null;
+  const nextSibling = focusedIdx >= 0 && focusedIdx < orderedList.length - 1 ? orderedList[focusedIdx + 1] : null;
+
+  // Only show if there are siblings at all
+  if (siblings.length === 0) return null;
+
+  const arrowY = CANVAS_H / 2 - 22; // vertically centred on canvas
+
+  return (
+    <>
+      {prevSibling && (
+        <TouchableOpacity
+          style={[styles.sibArrow, styles.sibArrowLeft, { top: arrowY }]}
+          onPress={() => onNavigate(prevSibling)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.sibArrowTxt}>‹</Text>
+        </TouchableOpacity>
+      )}
+      {nextSibling && (
+        <TouchableOpacity
+          style={[styles.sibArrow, styles.sibArrowRight, { top: arrowY }]}
+          onPress={() => onNavigate(nextSibling)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.sibArrowTxt}>›</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   const [focusedPersonId, setFocusedPersonId] = useState(initialFocusId);
@@ -678,6 +748,7 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
       })}
 
       <Header />
+      <SiblingNavArrows focusedPersonId={focusedPersonId} onNavigate={handlePress} />
       <AddHiver />
     </View>
   );
@@ -685,7 +756,7 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  canvas: { flex: 0.9, width: SW, backgroundColor: C.bg, overflow: 'hidden' },
+  canvas: { flex: 0.9, width: SW,  overflow: 'hidden' },
 
   card: { borderRadius: 14, borderWidth: 1.5, overflow: 'hidden',
     elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 7,
@@ -693,7 +764,7 @@ const styles = StyleSheet.create({
   cardCenter: { elevation: 12, shadowOpacity: 0.2, shadowRadius: 13,
     shadowOffset: { width: 0, height: 5 } },
 
-  cardTop: { flexDirection: 'row', height: 80 },
+  cardTop: { flexDirection: 'row', height: 72 },
   photoWrap: { width: 88, height: '100%', position: 'relative' },
   photo: { width: '100%', height: '100%', resizeMode: 'cover' },
   followerBubble: { position: 'absolute', bottom: 4, right: 4,
@@ -735,8 +806,8 @@ const styles = StyleSheet.create({
 
   header: { position: 'absolute', top: 0, left: 0, width: SW, height: HEADER_H,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 18, backgroundColor: C.bg,
-    zIndex: 200 },
+    paddingHorizontal: 18, 
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E8DDD0', zIndex: 200 },
   homeBtn: { padding: 3 },
   houseWrap: { alignItems: 'center', width: 26, height: 26 },
   roof: { width: 0, height: 0, borderLeftWidth: 13, borderRightWidth: 13,
@@ -756,13 +827,33 @@ const styles = StyleSheet.create({
   hdrDot: { position: 'absolute', bottom: -1, right: -2, width: 8, height: 8,
     borderRadius: 4, borderWidth: 1.5, borderColor: C.bg },
 
-  addHiverWrap: { position: 'absolute', bottom: 14, left: 0, right: 0,
+  addHiverWrap: { position: 'absolute', bottom: 20, left: 0, right: 0,
     alignItems: 'center', zIndex: 100 },
-  addHiverBtn: { flexDirection: 'row', alignItems: 'center', 
-    borderRadius: 30, paddingHorizontal: 26, paddingVertical: 11, gap: 11,},
-   
+  addHiverBtn: { flexDirection: 'row', alignItems: 'center'},
   plusCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: C.black,
-    alignItems: 'center', justifyContent: 'center' },
+    alignItems: 'center', justifyContent: 'center', marginRight: 8 },
   plusTxt: { fontSize: 19, color: C.white, fontWeight: '800', lineHeight: 22, marginTop: -1 },
-  addHiverLabel: { color: C.black, fontSize: 18,  letterSpacing: 0.2,fontFamily:'SofiaSansCondensed-Bold' },
+  addHiverLabel: { color: C.black, fontSize: 17,  letterSpacing: 0.2, fontFamily:'SofiaSansCondensed-Bold' },
+
+  // ── Sibling nav arrows ─────────────────────────────────────────────────────
+  sibArrow: {
+    position: 'absolute',
+    width: 36,
+    height: 56,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 90,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  sibArrowLeft:  { left: 6 },
+  sibArrowRight: { right: 6 },
+  sibArrowTxt: { fontSize: 32, color: C.black, fontWeight: '300', lineHeight: 38, marginTop: -2 },
 });
