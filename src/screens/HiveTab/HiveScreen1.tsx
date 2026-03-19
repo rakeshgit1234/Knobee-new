@@ -714,19 +714,111 @@ function AddHiver() {
   );
 }
 
-// ─── Selection bar ────────────────────────────────────────────────────────────
-function SelectionBar({ count, onClear, onNext }) {
+// ─── Action menu items ────────────────────────────────────────────────────────
+const ACTION_MENU = [
+  { icon: require('../../../assets/images/hive/group.png'), label: 'Create Chatterz Group' },
+  { icon: require('../../../assets/images/hive/send.png'), label: 'Send Broadcast' },
+  { icon: require('../../../assets/images/hive/Path.png'), label: 'Create Family Diary' },
+  { icon: require('../../../assets/images/profile/block.png'), label: 'Block Hive Member' },
+  { icon: require('../../../assets/images/hive/add.png'), label: 'Follow Hive Member' },
+];
+
+// ─── Selection bottom sheet ───────────────────────────────────────────────────
+// Stage 1: tap the bar → expands to show selected person list
+// Stage 2: tap Next  → shows action menu
+function SelectionBar({ count, selectedIds, onClear, onRemove }) {
   if (count === 0) return null;
+
+  const [stage, setStage] = useState(0);
+  // stage 0 = collapsed bar
+  // stage 1 = expanded: list of selected people
+  // stage 2 = action menu
+
+  // Reset to collapsed when selection changes to 0
+  useEffect(() => { if (count === 0) setStage(0); }, [count]);
+
+  const selectedPeople = [...selectedIds].map(id => PEOPLE[id]).filter(Boolean);
+
+  if (stage === 0) {
+    // ── Collapsed bar ──────────────────────────────────────────────────────
+    return (
+      <TouchableOpacity activeOpacity={0.9} onPress={() => setStage(1)} style={styles.selBar}>
+        <Text style={styles.selCount}>{count} Selected</Text>
+        <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); onClear(); }} style={styles.selClearBtn}>
+          <Text style={styles.selClearTxt}>Clear</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity onPress={(e) => { e.stopPropagation?.(); setStage(2); }} style={styles.selNextBtn}>
+          <Text style={styles.selNextTxt}>Next  →</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  }
+
+  if (stage === 1) {
+    // ── Expanded: selected people list ────────────────────────────────────
+    return (
+      <View style={styles.sheetOverlay}>
+        <TouchableOpacity style={styles.sheetDismiss} activeOpacity={1} onPress={() => setStage(0)} />
+        <View style={styles.sheet}>
+           <View style={[styles.selBar,{position:'relative'}]}>
+            <Text style={styles.selCount}>{count} Selected</Text>
+            <TouchableOpacity onPress={() => { onClear(); setStage(0); }} style={styles.selClearBtn}>
+              <Text style={styles.selClearTxt}>Clear</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={() => setStage(2)} style={styles.selNextBtn}>
+              <Text style={styles.selNextTxt}>Next  →</Text>
+            </TouchableOpacity>
+          </View>
+          {selectedPeople.map((person, i) => (
+            <View key={person.id} style={styles.sheetPersonRow}>
+              <TouchableOpacity
+                onPress={() => { onRemove(person.id); }}
+                style={styles.sheetCheckWrap}
+              >
+                <View style={styles.sheetCheck}>
+                  <Text style={styles.sheetCheckTick}>✓</Text>
+                </View>
+              </TouchableOpacity>
+              <Image source={{ uri: person.photo }} style={styles.sheetPersonPhoto} />
+              <Text style={styles.sheetPersonName}>{person.name}</Text>
+            </View>
+          ))}
+          {/* Header row */}
+       
+
+         
+        </View>
+      </View>
+    );
+  }
+
+  // stage === 2 → Action menu
   return (
-    <View style={styles.selBar}>
-      <Text style={styles.selCount}>{count} Selected</Text>
-      <TouchableOpacity onPress={onClear} style={styles.selClearBtn}>
-        <Text style={styles.selClearTxt}>Clear</Text>
-      </TouchableOpacity>
-      <View style={{ flex: 1 }} />
-      <TouchableOpacity onPress={onNext} style={styles.selNextBtn}>
-        <Text style={styles.selNextTxt}>Next  →</Text>
-      </TouchableOpacity>
+    <View style={styles.sheetOverlay}>
+      <TouchableOpacity style={styles.sheetDismiss} activeOpacity={1} onPress={() => setStage(0)} />
+      <View style={styles.sheet}>
+        {/* Header row */}
+        <View style={[styles.selBar,{position:'relative'}]}>
+          {/* <Text style={styles.selCount}>{count} Selected</Text> */}
+          {/* <TouchableOpacity onPress={onClear} style={styles.selClearBtn}>
+            <Text style={styles.selClearTxt}>Clear</Text>
+          </TouchableOpacity> */}
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setStage(1)} style={styles.selNextBtn}>
+            <Text style={styles.selNextTxt}>Next  →</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Action menu */}
+        {ACTION_MENU.map((item, i) => (
+          <TouchableOpacity key={i} style={styles.sheetActionRow} activeOpacity={0.7}>
+            <Image source={item.icon} style={{height: 24, width: 24,resizeMode: 'contain',marginRight: 10,tintColor: '#000'}} />
+            <Text style={styles.sheetActionLabel}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -850,8 +942,13 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
       {selectedIds.size > 0 ? (
         <SelectionBar
           count={selectedIds.size}
+          selectedIds={selectedIds}
           onClear={() => setSelectedIds(new Set())}
-          onNext={() => {}}
+          onRemove={(id) => setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          })}
         />
       ) : (
         <AddHiver />
@@ -1068,4 +1165,47 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8,
   },
   selNextTxt: { fontSize: 14, fontWeight: '600', color: 'rgba(84, 84, 84, 1)' },
+
+  // ── Bottom sheet (expanded states) ───────────────────────────────────────
+  sheetOverlay: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, top: 0,
+    justifyContent: 'flex-end', zIndex: 100,
+  },
+  sheetDismiss: { flex: 1 },
+  sheet: {
+    backgroundColor: 'rgba(230, 230, 230, 1)',
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    overflow: 'hidden',
+    elevation: 20,
+    shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12,
+    shadowOffset: { width: 0, height: -4 },
+  },
+  // Person row in stage-1
+  sheetPersonRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 18, paddingVertical: 5,
+   
+    backgroundColor: 'rgba(230, 230, 230, 1)',
+  },
+  sheetCheckWrap: { marginRight: 12 },
+  sheetCheck: {
+    width: 26, height: 26, borderRadius: 6,
+    backgroundColor: C.orange,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sheetCheckTick: { color: C.white, fontSize: 15, fontWeight: '900' },
+  sheetPersonPhoto: {
+    width: 52, height: 52, borderRadius: 8,
+    marginRight: 14, resizeMode: 'cover',
+  },
+  sheetPersonName: { fontSize: 20, color: C.text, fontFamily: 'SofiaSansCondensed-Medium', flex: 1 },
+  // Action rows in stage-2
+  sheetActionRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingVertical: 8,
+ 
+    backgroundColor: 'rgba(230, 230, 230, 1)',
+  },
+  sheetActionIcon: { fontSize: 22, width: 36 },
+  sheetActionLabel: { fontSize: 20, color: C.text, fontFamily: 'SofiaSansCondensed-Medium' },
 });
