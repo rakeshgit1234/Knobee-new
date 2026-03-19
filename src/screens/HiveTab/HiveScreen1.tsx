@@ -25,6 +25,8 @@ import Animated, {
   useAnimatedStyle, useSharedValue, withSpring,
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import FamilyDiaryScreen from './FamilyDiaryScreen';
+import AddDiaryScreen from './AddDiaryScreen';
 
 // ─── Screen ──────────────────────────────────────────────────────────────────
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -356,12 +358,21 @@ function CardPopup({ person, focusedId, cardX, cardY, isSelected, onToggleSelect
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FAMILY INDICATOR ⇄ BUTTONS
+// pink  = birth family (before marriage / father's side for women)
+// blue  = married-into family (in-laws) for married women; paternal family for men
 // ─────────────────────────────────────────────────────────────────────────────
-function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
+function FamilyIndicators({ person, cardX, cardY, role, isLeftCard, onOpenDiary }) {
   if (role === 'spouse') return null;
   const isMale    = person.gender === 'male';
   const isMarried = person.isMarried;
-  const btns = isMale ? [C.blueBtn] : (isMarried ? [C.pinkBtn, C.blueBtn] : [C.pinkBtn]);
+
+  // Each button carries its own familyType so the correct diary opens
+  const btns = isMale
+    ? [{ color: C.blueBtn, familyType: 'married' }]          // male: always blue = paternal
+    : isMarried
+      ? [{ color: C.pinkBtn, familyType: 'birth' },           // married female: pink = birth family
+         { color: C.blueBtn, familyType: 'married' }]         //                 blue = in-law family
+      : [{ color: C.pinkBtn, familyType: 'birth' }];          // unmarried female: pink = birth family
 
   if (role === 'center') {
     const totalH = btns.length * CTR_BTN_H + (btns.length - 1) * CTR_BTN_GAP;
@@ -369,13 +380,18 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
     const bx     = cardX - CTR_BTN_OFF;
     return (
       <>
-        {btns.map((color, i) => (
-          <View key={i} style={[styles.sideBtn, {
-            left: bx, top: startY + i*(CTR_BTN_H+CTR_BTN_GAP),
-            width: CTR_BTN_W, height: CTR_BTN_H, backgroundColor: color,
-          }]}>
+        {btns.map(({ color, familyType }, i) => (
+          <TouchableOpacity key={i}
+            style={[styles.sideBtn, {
+              left: bx, top: startY + i*(CTR_BTN_H+CTR_BTN_GAP),
+              width: CTR_BTN_W, height: CTR_BTN_H, backgroundColor: color,
+              zIndex: 200,
+            }]}
+            onPress={() => onOpenDiary(person.id, familyType)}
+            activeOpacity={0.75}
+          >
             <Image source={require('../../../assets/images/hive/Path.png')} style={{height: 20, width: 20}} />
-          </View>
+          </TouchableOpacity>
         ))}
       </>
     );
@@ -387,13 +403,18 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
 
   return (
     <>
-      {btns.map((color, i) => (
-        <View key={i} style={[styles.sideBtn, {
-          left: bx + i*(BTN_W+BTN_H_GAP), top: by,
-          width: BTN_W, height: BTN_H, backgroundColor: color,
-        }]}>
+      {btns.map(({ color, familyType }, i) => (
+        <TouchableOpacity key={i}
+          style={[styles.sideBtn, {
+            left: bx + i*(BTN_W+BTN_H_GAP), top: by,
+            width: BTN_W, height: BTN_H, backgroundColor: color,
+            zIndex: 200,
+          }]}
+          onPress={() => onOpenDiary(person.id, familyType)}
+          activeOpacity={0.75}
+        >
           <Image source={require('../../../assets/images/hive/Path.png')} style={{height: 20, width: 20}} />
-        </View>
+        </TouchableOpacity>
       ))}
     </>
   );
@@ -785,10 +806,6 @@ function SelectionBar({ count, selectedIds, onClear, onRemove }) {
               <Text style={styles.sheetPersonName}>{person.name}</Text>
             </View>
           ))}
-          {/* Header row */}
-       
-
-         
         </View>
       </View>
     );
@@ -823,12 +840,41 @@ function SelectionBar({ count, selectedIds, onClear, onRemove }) {
   );
 }
 
+// ─── Family key mapping ───────────────────────────────────────────────────────
+// birth   = family before marriage (pink button for women, or only button for unmarried)
+// married = paternal family for men, in-law family for married women
+const PERSON_FAMILY = {
+  shubham: { birth: 'seth',  married: 'seth'  }, // male → blue = seth (paternal)
+  maya:    { birth: 'maya',  married: 'seth'  }, // married female → pink=maya's birth, blue=seth (in-laws)
+  sandhya: { birth: 'seth',  married: 'kohli' }, // married female → pink=seth (birth), blue=kohli (in-laws)
+  arjun:   { birth: 'kohli', married: 'kohli' }, // male → blue = kohli (paternal)
+  raghav:  { birth: 'kohli', married: 'kohli' }, // male → blue = kohli
+  shruti:  { birth: 'kohli', married: 'kohli' }, // unmarried female → pink = kohli (birth)
+  dev:     { birth: 'kohli', married: 'kohli' }, // male → blue = kohli
+  vikram:  { birth: 'seth',  married: 'seth'  }, // male → blue = seth
+  kamla:   { birth: 'maya',  married: 'seth'  }, // married female → pink=birth, blue=seth
+  rohan:   { birth: 'seth',  married: 'seth'  }, // male → blue = seth
+  priya:   { birth: 'seth',  married: 'seth'  }, // unmarried female → pink = seth (birth)
+};
+
+function getFamilyKey(personId, familyType = 'birth') {
+  const entry = PERSON_FAMILY[personId];
+  if (!entry) return 'default';
+  return entry[familyType] || 'default';
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
+  // ── ALL hooks must be declared unconditionally at the top ──────────────────
   const [focusedPersonId, setFocusedPersonId] = useState(initialFocusId);
   const [childPage, setChildPage]             = useState(0);
-  const [popupData, setPopupData]             = useState(null); // { person, cardX, cardY }
+  const [popupData, setPopupData]             = useState(null);
   const [selectedIds, setSelectedIds]         = useState(new Set());
+
+  // Navigation state
+  const [screen, setScreen]       = useState(null); // null | 'diary' | 'addDiary'
+  const [diaryFamily, setDiaryFamily] = useState('seth');
+  const [diaryPerson, setDiaryPerson] = useState(null);
 
   // Reset child page when focus changes
   useEffect(() => { setChildPage(0); }, [focusedPersonId]);
@@ -838,6 +884,12 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
     [focusedPersonId, childPage],
   );
 
+  const handleOpenDiary = useCallback((personId, familyType = 'birth') => {
+    setDiaryFamily(getFamilyKey(personId, familyType));
+    setDiaryPerson(PEOPLE[personId]);
+    setScreen('diary');
+  }, []);
+
   const handlePress = useCallback((id) => {
     if (id !== focusedPersonId) setFocusedPersonId(id);
   }, [focusedPersonId]);
@@ -845,13 +897,9 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   const handleLongPress = useCallback((id) => {
     const nd = nodes[id];
     if (!nd) return;
-    // Popup opens near card — overlapping from card's horizontal midpoint
-    // Always opens to the right half of card extending rightward,
-    // unless that would overflow screen, then mirror to left
     setPopupData({ person: PEOPLE[id], cardX: nd.x, cardY: nd.y });
   }, [nodes]);
 
-  // Called from popup checkbox only
   const handleToggleSelect = useCallback((id) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -869,13 +917,9 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   const leftParentId  = parentEntries[0]?.[0];
   const leftChildId   = childEntries[0]?.[0];
 
-  // ── Swipe gesture for child row pagination ──────────────────────────────
-  // A horizontal swipe anywhere in the children zone (CHILDREN_BTN_Y to canvas bottom)
-  // slides to next or previous child page. No arrows shown — pure gesture.
   const swipeStartX = useRef(0);
   const childSwipePan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: (e) => {
-      // Only capture touches in the children zone
       const y = e.nativeEvent.pageY;
       return y >= CHILDREN_BTN_Y - 20;
     },
@@ -887,15 +931,36 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
     onPanResponderRelease: (e, gs) => {
       const SWIPE_THRESHOLD = 40;
       if (gs.dx < -SWIPE_THRESHOLD) {
-        // Swipe left → next page
         setChildPage(p => Math.min(totalChildPages - 1, p + 1));
       } else if (gs.dx > SWIPE_THRESHOLD) {
-        // Swipe right → prev page
         setChildPage(p => Math.max(0, p - 1));
       }
     },
   }), [totalChildPages]);
 
+  // ── Conditional renders AFTER all hooks ───────────────────────────────────
+  if (screen === 'diary') {
+    return (
+      <FamilyDiaryScreen
+        family={diaryFamily}
+        onBack={() => setScreen(null)}
+        onAddDiary={() => setScreen('addDiary')}
+      />
+    );
+  }
+
+  if (screen === 'addDiary') {
+    return (
+      <AddDiaryScreen
+        person={diaryPerson || PEOPLE['maya']}
+        initialTagged={diaryPerson ? [diaryPerson] : [PEOPLE['shubham']]}
+        onBack={() => setScreen('diary')}
+        onShare={() => setScreen('diary')}
+      />
+    );
+  }
+
+  // ── Family tree render ────────────────────────────────────────────────────
   return (
     <View style={styles.canvas} {...childSwipePan.panHandlers}>
       <RelationshipConnector
@@ -917,7 +982,7 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
         </AnimatedNode>
       ))}
 
-      {/* ⇄ family buttons */}
+      {/* ⇄ family buttons — rendered AFTER cards so they sit on top and receive touches */}
       {renderOrder.map(([id, nd]) => {
         if (nd.role === 'spouse') return null;
         const isLeftCard =
@@ -930,10 +995,10 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
             cardX={nd.x} cardY={nd.y}
             role={nd.role}
             isLeftCard={isLeftCard}
+            onOpenDiary={handleOpenDiary}
           />
         );
       })}
-
 
       <Header />
       <SiblingNavArrows focusedPersonId={focusedPersonId} onNavigate={handlePress} />
@@ -986,11 +1051,11 @@ const styles = StyleSheet.create({
   photoWrap: { width: 88, height: '100%', position: 'relative' },
   photo: { width: 72, height: '100%', resizeMode: 'cover' },
   followerBubble: { position: 'absolute', bottom: 0, right: 15,
-    backgroundColor: 'rgba(255,255,255,0.92)', borderTopLeftRadius: 6, 
+    backgroundColor: 'rgba(255,255,255,0.92)', borderTopLeftRadius: 6,
     paddingHorizontal: 4, paddingVertical: 1 },
-  followerTxt: { fontSize:12,  color: C.text,fontFamily:'SofiaSansCondensed-Medium' },
-  nameCol: { flex: 1, paddingLeft: -3, paddingTop: 9, paddingRight: 6,marginLeft:-6 },
-  nameTxt: { fontSize: 18,  color: C.text, fontFamily:'SofiaSansCondensed-Medium'  },
+  followerTxt: { fontSize:12, color: C.text, fontFamily:'SofiaSansCondensed-Medium' },
+  nameCol: { flex: 1, paddingLeft: -3, paddingTop: 9, paddingRight: 6, marginLeft:-6 },
+  nameTxt: { fontSize: 18, color: C.text, fontFamily:'SofiaSansCondensed-Medium' },
   decTag: { marginTop: 6, backgroundColor:'rgba(166, 166, 166, 1)', borderRadius: 6,
     paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' },
   decTagTxt: { color: C.black, fontSize: 12, fontFamily:'SofiaSansCondensed-Medium' },
@@ -999,24 +1064,25 @@ const styles = StyleSheet.create({
   followTxt: { fontSize: 12, fontFamily:'SofiaSansCondensed-Medium' },
   divider: { height: 1, opacity: 0.3 },
   cardBottom: { flex: 1, flexDirection: 'row' },
-  accentBar: { width: 2, alignSelf: 'stretch', opacity: 0.6,marginLeft: 4,height:40,marginTop: 6 },
+  accentBar: { width: 2, alignSelf: 'stretch', opacity: 0.6, marginLeft: 4, height:40, marginTop: 6 },
   infoCol: { flex: 1, paddingHorizontal: 8, paddingVertical: 6, gap: 3 },
   profTxt: { fontSize: 14, color: C.sub, fontFamily:'SofiaSansCondensed-Medium' },
   locRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  locTxt: { fontSize: 14, color: '#666', flex: 1,fontFamily:'SofiaSansCondensed-Medium' },
+  locTxt: { fontSize: 14, color: '#666', flex: 1, fontFamily:'SofiaSansCondensed-Medium' },
   flagWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   flagEmoji: { fontSize: 14, fontFamily:'SofiaSansCondensed-Medium' },
-  flagCode: { fontSize: 14,  color: '#666', fontFamily:'SofiaSansCondensed-Medium' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 3,position:'absolute',bottom:0,paddingHorizontal:8,paddingBottom:6,width:'100%',paddingTop:4 },
+  flagCode: { fontSize: 14, color: '#666', fontFamily:'SofiaSansCondensed-Medium' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 3, position:'absolute', bottom:0,
+    paddingHorizontal:8, paddingBottom:6, width:'100%', paddingTop:4 },
   dateIcon: { fontSize: 14, fontFamily:'SofiaSansCondensed-Medium' },
-  dateTxt: { fontSize: 14, color: '#777', flex: 1,fontFamily:'SofiaSansCondensed-Medium' },
+  dateTxt: { fontSize: 14, color: '#777', flex: 1, fontFamily:'SofiaSansCondensed-Medium' },
   marriageBand: { flexDirection: 'row', alignItems: 'center', gap: 3,
     borderRadius: 7, paddingHorizontal: 6, paddingVertical: 2, marginTop: 3 },
 
   // ⇄ buttons
   sideBtn: { position: 'absolute', borderRadius: 9,
-    alignItems: 'center', justifyContent: 'center', zIndex: 35,
-    elevation: 4, shadowColor: '#000', shadowOpacity: 0.13,
+    alignItems: 'center', justifyContent: 'center', zIndex: 200,
+    elevation: 10, shadowColor: '#000', shadowOpacity: 0.13,
     shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
   sideBtnIcon: { color: C.white, fontSize: 15, fontWeight: '700' },
 
@@ -1091,53 +1157,31 @@ const styles = StyleSheet.create({
     elevation: 18, shadowColor: '#000', shadowOpacity: 0.22,
     shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
   },
-  // Caret left: triangle pointing LEFT ◀ (sits on left edge of popup)
   caretLeft: {
-    position: 'absolute',
-    left: 0,
-    width: 0,
-    height: 0,
-    borderTopWidth: 10,
-    borderBottomWidth: 10,
-    borderRightWidth: 10,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderRightColor: '#F2F2F2',
-    zIndex: 1,
+    position: 'absolute', left: 0, width: 0, height: 0,
+    borderTopWidth: 10, borderBottomWidth: 10, borderRightWidth: 10,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent',
+    borderRightColor: '#F2F2F2', zIndex: 1,
   },
-  // Caret right: triangle pointing RIGHT ▶ (sits on right edge of popup)
   caretRight: {
-    position: 'absolute',
-    right: 0,
-    width: 0,
-    height: 0,
-    borderTopWidth: 10,
-    borderBottomWidth: 10,
-    borderLeftWidth: 10,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderLeftColor: '#F2F2F2',
-    zIndex: 1,
+    position: 'absolute', right: 0, width: 0, height: 0,
+    borderTopWidth: 10, borderBottomWidth: 10, borderLeftWidth: 10,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent',
+    borderLeftColor: '#F2F2F2', zIndex: 1,
   },
   popupPhotoWrap: { width: '100%', position: 'relative' },
-  popupPhoto: { width: '40%', height: '90%', resizeMode: 'cover',marginLeft:10,marginTop:15, borderRadius: 4,zIndex:9999 },
-  // Checkbox circle — empty = unselected (white border), filled teal = selected
+  popupPhoto: { width: '40%', height: '90%', resizeMode: 'cover', marginLeft:10, marginTop:15,
+    borderRadius: 4, zIndex:9999 },
   popupCheck: {
     position: 'absolute', top: 15, right: 10,
     width: 20, height: 20, borderRadius: 4,
-    backgroundColor: C.white,
-    borderWidth: 2, borderColor: C.teal,
+    backgroundColor: C.white, borderWidth: 2, borderColor: C.teal,
     alignItems: 'center', justifyContent: 'center',
   },
-  popupCheckSelected: {
-    backgroundColor: C.teal, borderColor: C.teal,
-  },
+  popupCheckSelected: { backgroundColor: C.teal, borderColor: C.teal },
   popupCheckTxt: { color: C.white, fontSize: 14, fontWeight: '900', lineHeight: 17 },
-  popupNameWrap: {
-    backgroundColor: 'rgba(205, 205, 205, 1)',
-    paddingHorizontal: 14, paddingVertical: 5,
-  },
-  popupName:     { fontSize: 16,  color: C.text,fontFamily:'SofiaSansCondensed-SemiBold' },
+  popupNameWrap: { backgroundColor: 'rgba(205, 205, 205, 1)', paddingHorizontal: 14, paddingVertical: 5 },
+  popupName:     { fontSize: 16, color: C.text, fontFamily:'SofiaSansCondensed-SemiBold' },
   popupRelation: { fontSize: 14, color: C.sub, marginTop: 1, fontFamily:'SofiaSansCondensed-Regular' },
   popupDivider:  { height: StyleSheet.hairlineWidth, backgroundColor: '#D0D0D0' },
   popupMenuItem: {
@@ -1157,7 +1201,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E0D8CE',
     zIndex: 100,
   },
-  selCount:   { fontSize: 20,  color: 'rgba(84, 84, 84, 1)', fontFamily:'SofiaSansCondensed-Medium' },
+  selCount:   { fontSize: 20, color: 'rgba(84, 84, 84, 1)', fontFamily:'SofiaSansCondensed-Medium' },
   selClearBtn: { marginLeft: 12, paddingHorizontal: 10, paddingVertical: 4 },
   selClearTxt: { fontSize: 18, color: 'rgba(84, 84, 84, 1)', fontFamily:'SofiaSansCondensed-Medium' },
   selNextBtn: {
@@ -1175,35 +1219,26 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: 'rgba(230, 230, 230, 1)',
     borderTopLeftRadius: 16, borderTopRightRadius: 16,
-    overflow: 'hidden',
-    elevation: 20,
+    overflow: 'hidden', elevation: 20,
     shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 12,
     shadowOffset: { width: 0, height: -4 },
   },
-  // Person row in stage-1
   sheetPersonRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 18, paddingVertical: 5,
-   
     backgroundColor: 'rgba(230, 230, 230, 1)',
   },
   sheetCheckWrap: { marginRight: 12 },
   sheetCheck: {
     width: 26, height: 26, borderRadius: 6,
-    backgroundColor: C.orange,
-    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center',
   },
   sheetCheckTick: { color: C.white, fontSize: 15, fontWeight: '900' },
-  sheetPersonPhoto: {
-    width: 52, height: 52, borderRadius: 8,
-    marginRight: 14, resizeMode: 'cover',
-  },
+  sheetPersonPhoto: { width: 52, height: 52, borderRadius: 8, marginRight: 14, resizeMode: 'cover' },
   sheetPersonName: { fontSize: 20, color: C.text, fontFamily: 'SofiaSansCondensed-Medium', flex: 1 },
-  // Action rows in stage-2
   sheetActionRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 20, paddingVertical: 8,
- 
     backgroundColor: 'rgba(230, 230, 230, 1)',
   },
   sheetActionIcon: { fontSize: 22, width: 36 },
