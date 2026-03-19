@@ -17,7 +17,7 @@ import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-  Dimensions, Image, Modal, PanResponder, ScrollView,
+  Dimensions, Image, PanResponder, ScrollView,
   StyleSheet, Text, TouchableOpacity,
   TouchableWithoutFeedback, View,
 } from 'react-native';
@@ -32,11 +32,11 @@ const CANVAS_H = SH * 0.9;
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 const C = {
-  bg: '#FDF6EE', pink: '#F8D6EA', pinkBd: '#E879A0',
-  blue: '#D6EFF8', blueBd: '#5BB8D4', gray: '#E4E4E4', grayBd: '#AAAAAA',
-  teal: '#5BB8D4', pinkBtn: '#E879A0', blueBtn: '#5BB8D4',
-  connector: '#BBBBBB', dotBlue: '#5BB8D4', dotPink: '#E879A0',
-  dotBlueDim: '#A8D8EC', dotPinkDim: '#F0AACE',
+  bg: '#FDF6EE', pink: 'rgba(255, 233, 251, 1)', pinkBd: 'rgba(255, 193, 244, 1)',
+  blue: 'rgba(215, 240, 255, 1)', blueBd: 'rgba(177, 225, 255, 1)', gray: '#E4E4E4', grayBd: 'rgba(212, 212, 212, 1)',
+  teal: '#5BB8D4', pinkBtn: 'rgba(255, 193, 244, 1)', blueBtn: 'rgba(177, 225, 255, 1)',
+  connector: '#BBBBBB', dotBlue: 'rgba(177, 225, 255, 1)', dotPink: 'rgba(255, 193, 244, 1)',
+  dotBlueDim: 'rgba(168, 216, 236, 1)', dotPinkDim: 'rgba(240, 170, 206, 1)',
   text: '#1A1A1A', sub: '#555', white: '#FFF', black: '#111', decBg: '#B0B0B0',
   orange: '#F5A623', orangeLight: '#FFF3E0',
 };
@@ -244,51 +244,113 @@ function AnimatedNode({ x, y, zIndex, width, height, children }) {
 // Shows: large photo, name, relation label, then menu items
 // ─────────────────────────────────────────────────────────────────────────────
 const POPUP_MENU = [
-  { icon: '⊕', label: 'Add Hiver' },
-  { icon: '👤', label: 'Profile' },
-  { icon: '⇄', label: 'Chattrz' },
-  { icon: '📄', label: 'Seth Diaries' },
-  { icon: '⊘', label: 'Block' },
+  { icon: require('../../../assets/images/chat/add.png'), label: 'Add Hiver' },
+  { icon: require('../../../assets/images/profile/user1.png'), label: 'Profile' },
+  { icon: require('../../../assets/images/tabs/chatter.png'), label: 'Chattrz' },
+  { icon: require('../../../assets/images/chat/docs.png'), label: 'Seth Diaries' },
+  { icon: require('../../../assets/images/profile/block.png'), label: 'Block' },
 ];
 
-function CardPopup({ person, focusedId, onClose }) {
+// ── Popup layout constants ────────────────────────────────────────────────
+const POPUP_W       = SW * 0.54;  // ~60% screen width (compact)
+const POPUP_PHOTO_H = 118;        // photo height
+const POPUP_ITEM_H  = 32;         // menu item row height
+const POPUP_NAME_H  = 52;         // name+relation band
+const POPUP_TOTAL_H = POPUP_PHOTO_H + POPUP_NAME_H + POPUP_MENU.length * POPUP_ITEM_H;
+
+/**
+ * CardPopup
+ *
+ * Anchoring (matches screenshot):
+ *  - Popup LEFT edge = card's horizontal midpoint (overlapping right half of card)
+ *  - If that causes right overflow → mirror: popup RIGHT edge = card's horizontal midpoint
+ *  - Popup TOP = card top, clamped to stay inside canvas
+ *
+ * The teal ✓ checkbox in top-right corner ONLY toggles selection when tapped.
+ * Long press itself does NOT auto-select.
+ */
+const ARROW_SIZE = 10; // half-size of the caret triangle
+
+function CardPopup({ person, focusedId, cardX, cardY, isSelected, onToggleSelect, onClose }) {
   if (!person) return null;
   const relation = getRelationLabel(person.id, focusedId);
+
+  // Determine which side to open on
+  const cardMidX = cardX + CARD_W / 2;
+  const openRight = cardMidX + POPUP_W <= SW - 4; // enough room to open right?
+  let popupLeft = openRight ? cardMidX : cardMidX - POPUP_W;
+  popupLeft = Math.max(4, Math.min(SW - POPUP_W - 4, popupLeft));
+
+  // Popup top = card top, clamped
+  const minTop = HEADER_H + 2;
+  const maxTop = CANVAS_H - POPUP_TOTAL_H - 8;
+  const popupTop = Math.max(minTop, Math.min(maxTop, cardY));
+
+  // Arrow vertical position: align with card vertical center relative to popup top
+  const cardCenterY = cardY + CARD_H / 2;
+  const arrowTop = Math.max(16, Math.min(
+    POPUP_TOTAL_H - 16 - ARROW_SIZE * 2,
+    cardCenterY - popupTop - ARROW_SIZE,
+  ));
+
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.popupOverlay}>
-          <TouchableWithoutFeedback onPress={() => {}}>
-            <View style={styles.popupCard}>
-              {/* Photo header */}
-              <View style={styles.popupPhotoWrap}>
+    <TouchableWithoutFeedback onPress={onClose}>
+      <View style={styles.popupOverlay}>
+        <TouchableWithoutFeedback onPress={() => {}}>
+          {/* Wrapper for popup + arrow together, positioned absolutely */}
+          <View style={{ position: 'absolute', left: popupLeft, top: popupTop }}>
+
+            {/* ── Caret arrow pointing back toward the card ── */}
+            {openRight ? (
+              // Arrow on LEFT side of popup, pointing LEFT ◀
+              <View style={[styles.caretLeft, { top: arrowTop }]} />
+            ) : (
+              // Arrow on RIGHT side of popup, pointing RIGHT ▶
+              <View style={[styles.caretRight, { top: arrowTop }]} />
+            )}
+
+            {/* ── Popup card ── */}
+            <View style={[styles.popupCard, { width: POPUP_W, marginLeft: openRight ? ARROW_SIZE : 0, marginRight: openRight ? 0 : ARROW_SIZE }]}>
+
+              {/* Photo */}
+              <View style={[styles.popupPhotoWrap, { height: POPUP_PHOTO_H }]}>
                 <Image source={{ uri: person.photo }} style={styles.popupPhoto} />
-                {/* Teal checkmark */}
-                <View style={styles.popupCheck}>
-                  <Text style={styles.popupCheckTxt}>✓</Text>
-                </View>
+                <TouchableOpacity
+                  style={[styles.popupCheck, isSelected && styles.popupCheckSelected]}
+                  onPress={onToggleSelect}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.popupCheckTxt}>{isSelected ? '✓' : ''}</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Name + relation */}
               <View style={styles.popupNameWrap}>
-                <Text style={styles.popupName}>{person.name}</Text>
+                <Text style={styles.popupName} numberOfLines={1}>{person.name}</Text>
                 {!!relation && <Text style={styles.popupRelation}>{relation}</Text>}
               </View>
 
-              <View style={styles.popupDivider} />
-
               {/* Menu items */}
               {POPUP_MENU.map((item, i) => (
-                <TouchableOpacity key={i} style={styles.popupMenuItem} onPress={onClose} activeOpacity={0.7}>
-                  <Text style={styles.popupMenuIcon}>{item.icon}</Text>
+                <TouchableOpacity
+                  key={i}
+                  style={[
+                    styles.popupMenuItem,
+                    { height: POPUP_ITEM_H },
+                    i === POPUP_MENU.length - 1 && { borderBottomWidth: 0 },
+                  ]}
+                  onPress={onClose}
+                  // activeOpacity={0.7}
+                >
+                  <Image source={item.icon} style={{ width: 20, height: 20, resizeMode: 'contain' }} tintColor={'black'} />
                   <Text style={styles.popupMenuLabel}>{item.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </TouchableWithoutFeedback>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+          </View>
+        </TouchableWithoutFeedback>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -312,7 +374,7 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
             left: bx, top: startY + i*(CTR_BTN_H+CTR_BTN_GAP),
             width: CTR_BTN_W, height: CTR_BTN_H, backgroundColor: color,
           }]}>
-            <Text style={styles.sideBtnIcon}>⇄</Text>
+            <Image source={require('../../../assets/images/hive/Path.png')} style={{height: 20, width: 20}} />
           </View>
         ))}
       </>
@@ -330,7 +392,7 @@ function FamilyIndicators({ person, cardX, cardY, role, isLeftCard }) {
           left: bx + i*(BTN_W+BTN_H_GAP), top: by,
           width: BTN_W, height: BTN_H, backgroundColor: color,
         }]}>
-          <Text style={styles.sideBtnIcon}>⇄</Text>
+          <Image source={require('../../../assets/images/hive/Path.png')} style={{height: 20, width: 20}} />
         </View>
       ))}
     </>
@@ -386,9 +448,9 @@ function PersonCard({ person, isCenter, isSelected, onPress, onLongPress, cardW,
             ) : (
               <TouchableOpacity
                 onPress={() => setFollowing(v => !v)}
-                style={[styles.followBtn, { borderColor: C.teal }, following && { backgroundColor: C.teal }]}
+                style={[styles.followBtn, { borderColor: 'rgba(0, 107, 165, 0.5)' }, following && { backgroundColor: 'rgba(0, 107, 165, 0.5)' }]}
               >
-                <Text style={[styles.followTxt, { color: following ? C.white : C.teal }]}>
+                <Text style={[styles.followTxt, { color: '#000'}]}>
                   {following ? 'Following' : `+ Follow | ${fc}`}
                 </Text>
               </TouchableOpacity>
@@ -396,7 +458,7 @@ function PersonCard({ person, isCenter, isSelected, onPress, onLongPress, cardW,
           </View>
         </View>
 
-        <View style={[styles.divider, { backgroundColor: bd }]} />
+        {/* <View style={[styles.divider, { backgroundColor: bd }]} /> */}
 
         <View style={styles.cardBottom}>
           <View style={[styles.accentBar, { backgroundColor: isSelected ? C.orange : bd }]} />
@@ -409,23 +471,23 @@ function PersonCard({ person, isCenter, isSelected, onPress, onLongPress, cardW,
                 <Text style={styles.flagCode}>{person.flagCode}</Text>
               </View>
             </View>
-            <View style={styles.dateRow}>
-              <Text style={styles.dateIcon}>🎂</Text>
-              <Text style={styles.dateTxt} numberOfLines={1}>{person.birthDate}</Text>
-            </View>
-            {isDeceased && (
-              <View style={styles.dateRow}>
-                <Text style={styles.dateIcon}>✝</Text>
-                <Text style={styles.dateTxt} numberOfLines={1}>{person.deathDate}</Text>
-              </View>
-            )}
-            {isCenter && person.marriageDate && (
+            
+\
+            {/* {isCenter && person.marriageDate && (
               <View style={[styles.marriageBand, { backgroundColor: C.blue }]}>
                 <Text style={styles.dateIcon}>🎂</Text>
                 <Text style={styles.dateTxt}>{person.marriageDate}</Text>
               </View>
-            )}
+            )} */}
           </View>
+          <View style={[styles.dateRow,{backgroundColor: isSelected ? C.orange : bd}]}>
+              {!person.deathDate && (
+                <Image source={require('../../../assets/images/hive/Cake.png')} style={{height: 16, width: 16}} />
+              )}
+              <Text style={styles.dateTxt} numberOfLines={1}> {person.deathDate
+    ? `${person.birthDate} - ${person.deathDate}`
+    : person.birthDate}</Text>
+            </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -623,23 +685,17 @@ function Header() {
   return (
     <View style={styles.header}>
       <TouchableOpacity style={styles.homeBtn}>
-        <View style={styles.houseWrap}>
-          <View style={styles.roof} />
-          <View style={styles.chimney} />
-          <View style={styles.houseBody}><View style={styles.door} /></View>
-        </View>
+        <Image source={require('../../../assets/images/hive/home.png')} style={{height: 24, width: 24}} />
       </TouchableOpacity>
       <View style={styles.headerRight}>
         <TouchableOpacity style={styles.hdrIconWrap}>
-          <Text style={styles.hdrIcon}>⇄</Text>
-          <View style={[styles.hdrDot, { backgroundColor: C.dotBlue }]} />
+          <Image source={require('../../../assets/images/hive/male.png')} style={{height: 24, width: 24}} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.hdrIconWrap}>
-          <Text style={styles.hdrIcon}>⇄</Text>
-          <View style={[styles.hdrDot, { backgroundColor: C.dotPink }]} />
+          <Image source={require('../../../assets/images/hive/female.png')} style={{height: 24, width: 24}} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.hdrIconWrap}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Image source={require('../../../assets/images/home/search.png')} style={{height: 24, width: 24}} />
         </TouchableOpacity>
       </View>
     </View>
@@ -679,7 +735,7 @@ function SelectionBar({ count, onClear, onNext }) {
 export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   const [focusedPersonId, setFocusedPersonId] = useState(initialFocusId);
   const [childPage, setChildPage]             = useState(0);
-  const [popupPerson, setPopupPerson]         = useState(null);
+  const [popupData, setPopupData]             = useState(null); // { person, cardX, cardY }
   const [selectedIds, setSelectedIds]         = useState(new Set());
 
   // Reset child page when focus changes
@@ -695,8 +751,16 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
   }, [focusedPersonId]);
 
   const handleLongPress = useCallback((id) => {
-    setPopupPerson(PEOPLE[id]);
-    // Also toggle selection
+    const nd = nodes[id];
+    if (!nd) return;
+    // Popup opens near card — overlapping from card's horizontal midpoint
+    // Always opens to the right half of card extending rightward,
+    // unless that would overflow screen, then mirror to left
+    setPopupData({ person: PEOPLE[id], cardX: nd.x, cardY: nd.y });
+  }, [nodes]);
+
+  // Called from popup checkbox only
+  const handleToggleSelect = useCallback((id) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -794,11 +858,15 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
       )}
 
       {/* Long-press popup */}
-      {popupPerson && (
+      {popupData && (
         <CardPopup
-          person={popupPerson}
+          person={popupData.person}
           focusedId={focusedPersonId}
-          onClose={() => setPopupPerson(null)}
+          cardX={popupData.cardX}
+          cardY={popupData.cardY}
+          isSelected={selectedIds.has(popupData.person.id)}
+          onToggleSelect={() => handleToggleSelect(popupData.person.id)}
+          onClose={() => setPopupData(null)}
         />
       )}
     </View>
@@ -819,32 +887,32 @@ const styles = StyleSheet.create({
 
   cardTop: { flexDirection: 'row', height: 72 },
   photoWrap: { width: 88, height: '100%', position: 'relative' },
-  photo: { width: '100%', height: '100%', resizeMode: 'cover' },
-  followerBubble: { position: 'absolute', bottom: 4, right: 4,
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 7,
+  photo: { width: 72, height: '100%', resizeMode: 'cover' },
+  followerBubble: { position: 'absolute', bottom: 0, right: 15,
+    backgroundColor: 'rgba(255,255,255,0.92)', borderTopLeftRadius: 6, 
     paddingHorizontal: 4, paddingVertical: 1 },
-  followerTxt: { fontSize: 9.5, fontWeight: '800', color: C.text },
-  nameCol: { flex: 1, paddingLeft: 8, paddingTop: 9, paddingRight: 6 },
-  nameTxt: { fontSize: 13, fontWeight: '800', color: C.text, lineHeight: 16 },
-  decTag: { marginTop: 6, backgroundColor: C.decBg, borderRadius: 6,
+  followerTxt: { fontSize:12,  color: C.text,fontFamily:'SofiaSansCondensed-Medium' },
+  nameCol: { flex: 1, paddingLeft: -3, paddingTop: 9, paddingRight: 6,marginLeft:-6 },
+  nameTxt: { fontSize: 18,  color: C.text, fontFamily:'SofiaSansCondensed-Medium'  },
+  decTag: { marginTop: 6, backgroundColor:'rgba(166, 166, 166, 1)', borderRadius: 6,
     paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' },
-  decTagTxt: { color: C.white, fontSize: 9.5, fontWeight: '700' },
+  decTagTxt: { color: C.black, fontSize: 12, fontFamily:'SofiaSansCondensed-Medium' },
   followBtn: { marginTop: 6, borderWidth: 1.5, borderRadius: 7,
     paddingHorizontal: 6, paddingVertical: 3, alignSelf: 'flex-start' },
-  followTxt: { fontSize: 9.5, fontWeight: '700' },
+  followTxt: { fontSize: 12, fontFamily:'SofiaSansCondensed-Medium' },
   divider: { height: 1, opacity: 0.3 },
   cardBottom: { flex: 1, flexDirection: 'row' },
-  accentBar: { width: 3, alignSelf: 'stretch', opacity: 0.6 },
+  accentBar: { width: 2, alignSelf: 'stretch', opacity: 0.6,marginLeft: 4,height:40,marginTop: 6 },
   infoCol: { flex: 1, paddingHorizontal: 8, paddingVertical: 6, gap: 3 },
-  profTxt: { fontSize: 10.5, color: C.sub, fontWeight: '600' },
+  profTxt: { fontSize: 14, color: C.sub, fontFamily:'SofiaSansCondensed-Medium' },
   locRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  locTxt: { fontSize: 10, color: '#666', flex: 1 },
+  locTxt: { fontSize: 14, color: '#666', flex: 1,fontFamily:'SofiaSansCondensed-Medium' },
   flagWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  flagEmoji: { fontSize: 12 },
-  flagCode: { fontSize: 10, fontWeight: '700', color: '#666' },
-  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  dateIcon: { fontSize: 9 },
-  dateTxt: { fontSize: 9.5, color: '#777', flex: 1 },
+  flagEmoji: { fontSize: 14, fontFamily:'SofiaSansCondensed-Medium' },
+  flagCode: { fontSize: 14,  color: '#666', fontFamily:'SofiaSansCondensed-Medium' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 3,position:'absolute',bottom:0,paddingHorizontal:8,paddingBottom:6,width:'100%',paddingTop:4 },
+  dateIcon: { fontSize: 14, fontFamily:'SofiaSansCondensed-Medium' },
+  dateTxt: { fontSize: 14, color: '#777', flex: 1,fontFamily:'SofiaSansCondensed-Medium' },
   marriageBand: { flexDirection: 'row', alignItems: 'center', gap: 3,
     borderRadius: 7, paddingHorizontal: 6, paddingVertical: 2, marginTop: 3 },
 
@@ -916,49 +984,88 @@ const styles = StyleSheet.create({
 
   // ── Context popup ────────────────────────────────────────────────────────
   popupOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center', alignItems: 'center',
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    zIndex: 500,
   },
   popupCard: {
-    width: SW * 0.82, borderRadius: 20,
-    backgroundColor: C.white, overflow: 'hidden',
-    elevation: 16, shadowColor: '#000', shadowOpacity: 0.25,
-    shadowRadius: 20, shadowOffset: { width: 0, height: 8 },
+    borderRadius: 10,
+    backgroundColor: 'rgba(226, 226, 226, 1)', overflow: 'hidden',
+    elevation: 18, shadowColor: '#000', shadowOpacity: 0.22,
+    shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
   },
-  popupPhotoWrap: { width: '100%', height: 150, position: 'relative' },
-  popupPhoto: { width: '100%', height: '100%', resizeMode: 'cover' },
+  // Caret left: triangle pointing LEFT ◀ (sits on left edge of popup)
+  caretLeft: {
+    position: 'absolute',
+    left: 0,
+    width: 0,
+    height: 0,
+    borderTopWidth: 10,
+    borderBottomWidth: 10,
+    borderRightWidth: 10,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderRightColor: '#F2F2F2',
+    zIndex: 1,
+  },
+  // Caret right: triangle pointing RIGHT ▶ (sits on right edge of popup)
+  caretRight: {
+    position: 'absolute',
+    right: 0,
+    width: 0,
+    height: 0,
+    borderTopWidth: 10,
+    borderBottomWidth: 10,
+    borderLeftWidth: 10,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#F2F2F2',
+    zIndex: 1,
+  },
+  popupPhotoWrap: { width: '100%', position: 'relative' },
+  popupPhoto: { width: '40%', height: '90%', resizeMode: 'cover',marginLeft:10,marginTop:15, borderRadius: 4,zIndex:9999 },
+  // Checkbox circle — empty = unselected (white border), filled teal = selected
   popupCheck: {
-    position: 'absolute', top: 10, right: 10,
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: C.teal, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: 15, right: 10,
+    width: 20, height: 20, borderRadius: 4,
+    backgroundColor: C.white,
+    borderWidth: 2, borderColor: C.teal,
+    alignItems: 'center', justifyContent: 'center',
   },
-  popupCheckTxt: { color: C.white, fontSize: 16, fontWeight: '800' },
-  popupNameWrap: { backgroundColor: '#EFEFEF', paddingHorizontal: 18, paddingVertical: 12 },
-  popupName:     { fontSize: 18, fontWeight: '800', color: C.text },
-  popupRelation: { fontSize: 13, color: C.sub, marginTop: 2 },
-  popupDivider:  { height: StyleSheet.hairlineWidth, backgroundColor: '#DDD', marginHorizontal: 18 },
+  popupCheckSelected: {
+    backgroundColor: C.teal, borderColor: C.teal,
+  },
+  popupCheckTxt: { color: C.white, fontSize: 14, fontWeight: '900', lineHeight: 17 },
+  popupNameWrap: {
+    backgroundColor: 'rgba(205, 205, 205, 1)',
+    paddingHorizontal: 14, paddingVertical: 5,
+  },
+  popupName:     { fontSize: 16,  color: C.text,fontFamily:'SofiaSansCondensed-SemiBold' },
+  popupRelation: { fontSize: 14, color: C.sub, marginTop: 1, fontFamily:'SofiaSansCondensed-Regular' },
+  popupDivider:  { height: StyleSheet.hairlineWidth, backgroundColor: '#D0D0D0' },
   popupMenuItem: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 18, paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#F0F0F0',
+    paddingHorizontal: 5, paddingVertical: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E4E4E4',
+    backgroundColor: 'rgba(226, 226, 226, 1)',
   },
-  popupMenuIcon:  { fontSize: 18, width: 32, textAlign: 'center' },
-  popupMenuLabel: { fontSize: 15, color: C.text, marginLeft: 10, fontWeight: '500' },
+  popupMenuIcon:  { fontSize: 16, width: 28, textAlign: 'center', color: C.sub },
+  popupMenuLabel: { fontSize: 14, color: C.text, marginLeft: 3, fontFamily:'SofiaSansCondensed-Medium' },
 
   // ── Selection bar ─────────────────────────────────────────────────────────
   selBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: 54, flexDirection: 'row', alignItems: 'center',
-    backgroundColor: C.bg, paddingHorizontal: 18,
+    backgroundColor: 'rgba(217, 217, 217, 1)', paddingHorizontal: 18,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E0D8CE',
     zIndex: 100,
   },
-  selCount:   { fontSize: 16, fontWeight: '700', color: C.text },
+  selCount:   { fontSize: 20,  color: 'rgba(84, 84, 84, 1)', fontFamily:'SofiaSansCondensed-Medium' },
   selClearBtn: { marginLeft: 12, paddingHorizontal: 10, paddingVertical: 4 },
-  selClearTxt: { fontSize: 14, color: C.sub },
+  selClearTxt: { fontSize: 18, color: 'rgba(84, 84, 84, 1)', fontFamily:'SofiaSansCondensed-Medium' },
   selNextBtn: {
-    backgroundColor: C.bg, borderWidth: 1, borderColor: C.grayBd,
-    borderRadius: 20, paddingHorizontal: 20, paddingVertical: 8,
+    backgroundColor: 'rgba(217, 217, 217, 1)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.21)',
+    borderRadius: 8, paddingHorizontal: 20, paddingVertical: 8,
   },
-  selNextTxt: { fontSize: 14, fontWeight: '600', color: C.text },
+  selNextTxt: { fontSize: 14, fontWeight: '600', color: 'rgba(84, 84, 84, 1)' },
 });
