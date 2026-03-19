@@ -118,7 +118,7 @@ const ChatterZScreen = ({ navigation }: { navigation?: any }) => {
             <Text style={styles.dropdownLabel}>Create Group</Text>
           </TouchableOpacity>
           <View style={styles.dropdownDivider} />
-          <TouchableOpacity style={styles.dropdownItem} onPress={() => setShowMenu(false)}>
+          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setShowMenu(false); navigation?.navigate('BulkInvite'); }}>
             <Image source={require('../../../assets/images/chat/invite.png')} style={{ width: 18, height: 18 }} />
             <Text style={styles.dropdownLabel}>Bulk Invite</Text>
           </TouchableOpacity>

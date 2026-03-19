@@ -38,6 +38,10 @@ import NotificationScreen from '../screens/HomeTab/NotificationScreen';
 import SearchScreen from '../screens/HomeTab/SearchScreen';
 import NearbySearchScreen from '../screens/HomeTab/NearbySearchScreen';
 import StoryViewScreen from '../screens/HomeTab/StoryViewScreen';
+import AddHiveScreen from '../screens/HiveTab/AddHiveScreen';
+import BulkInviteScreen from '../screens/ChatterzTab/BulkInviteScreen';
+import ProfileScreen from '../screens/ProfileTab/othersprofile';
+import RelationFinderScreen from '../screens/ProfileTab/RelationFinderScreen';
 
 
 
@@ -122,7 +126,10 @@ const AppNavigator = () => {
 <Stack.Screen name="Search" component={SearchScreen} />
 <Stack.Screen name="NearbySearch" component={NearbySearchScreen} />
 <Stack.Screen name="StoryView" component={StoryViewScreen} />
-
+<Stack.Screen name="AddHive" component={AddHiveScreen} />
+<Stack.Screen name="BulkInvite" component={BulkInviteScreen} />
+<Stack.Screen name="Profile" component={ProfileScreen} />
+<Stack.Screen name="RelationFinder" component={RelationFinderScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>

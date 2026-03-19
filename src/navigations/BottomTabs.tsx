@@ -21,12 +21,39 @@ import HiveFamilyGraph from '../screens/HiveTab/HiveScreen1';
 
 const Tab = createBottomTabNavigator();
 
+/* ---------------- TAB CONFIG ---------------- */
+
 const TABS = [
-  { name: 'Home', label: 'Home', icon: require('../../assets/images/tabs/home_active.png') },
-  { name: 'People', label: 'People', icon: require('../../assets/images/tabs/people_active.png') },
-  { name: 'Hive', label: 'Hive', icon: require('../../assets/images/tabs/hive_active.png') },
-  { name: 'ChatterZ', label: 'Chat', icon: require('../../assets/images/tabs/chatter_active.png') },
-  { name: 'Profile', label: 'Me', icon: require('../../assets/images/tabs/profile.png') },
+  {
+    name: 'Home',
+    label: 'Home',
+    activeIcon: require('../../assets/images/tabs/home_active.png'),
+    inactiveIcon: require('../../assets/images/tabs/home.png'),
+  },
+  {
+    name: 'People',
+    label: 'People',
+    activeIcon: require('../../assets/images/tabs/people_active.png'),
+    inactiveIcon: require('../../assets/images/tabs/people.png'),
+  },
+  {
+    name: 'Hive',
+    label: 'Hive',
+    activeIcon: require('../../assets/images/tabs/hive_active.png'),
+    inactiveIcon: require('../../assets/images/tabs/hive.png'),
+  },
+  {
+    name: 'ChatterZ',
+    label: 'Chat',
+    activeIcon: require('../../assets/images/tabs/chatter_active.png'),
+    inactiveIcon: require('../../assets/images/tabs/chatter.png'),
+  },
+  {
+    name: 'Profile',
+    label: 'Me',
+    activeIcon: require('../../assets/images/tabs/profile.png'),
+    inactiveIcon: require('../../assets/images/tabs/profile.png'),
+  },
 ];
 
 
@@ -54,6 +81,8 @@ const TabButton = ({ tab, focused, onPress, isCenter }) => {
     }
 
   }, [focused]);
+
+  const iconSource = focused ? tab.activeIcon : tab.inactiveIcon;
 
   return (
     <TouchableOpacity
@@ -83,11 +112,10 @@ const TabButton = ({ tab, focused, onPress, isCenter }) => {
 
               <View style={{ transform: [{ rotate: '-45deg' }] }}>
                 <Image
-                  source={tab.icon}
+                  source={iconSource}
                   style={{
                     width: 26,
                     height: 26,
-                    tintColor: '#fff',
                   }}
                   resizeMode="contain"
                 />
@@ -100,11 +128,10 @@ const TabButton = ({ tab, focused, onPress, isCenter }) => {
         ) : (
 
           <Image
-            source={tab.icon}
+            source={iconSource}
             style={{
               width: 24,
               height: 24,
-              tintColor: focused ? '#fff' : '#aaa',
             }}
             resizeMode="contain"
           />

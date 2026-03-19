@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, FlatList,
 } from 'react-native';
+import BloodBankFlow from './BloodBankScreens';
 
 // Types
 type SavedPost = {
@@ -49,6 +50,8 @@ type SettingsScreenProps = {
 
 const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
   const [rating, setRating] = useState(0);
+  // ── Blood Bank flow shown inline (no navigator needed) ───────────────────
+  const [showBloodBank, setShowBloodBank] = useState(false);
 
   const profileData = {
     name: 'Sristy Singh',
@@ -58,13 +61,13 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
     profileCompletion: 85,
   };
 
-  const MenuItem = ({ 
-    icon, 
-    label, 
-    onPress 
-  }: { 
-    icon: any; 
-    label: string; 
+  const MenuItem = ({
+    icon,
+    label,
+    onPress,
+  }: {
+    icon: any;
+    label: string;
     onPress?: () => void;
   }) => (
     <TouchableOpacity style={styles.menuItem} onPress={onPress}>
@@ -73,6 +76,16 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
       <Image source={require('../../../assets/images/chat/chevron-right.png')} style={styles.chevronIcon} />
     </TouchableOpacity>
   );
+
+  // ── If Blood Bank flow is open, render it full-screen ────────────────────
+  if (showBloodBank) {
+    return (
+      <BloodBankFlow
+        onBack={() => setShowBloodBank(false)}
+        onComplete={() => setShowBloodBank(false)}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -93,13 +106,12 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
             <View style={styles.profileHeader}>
               <View>
                 <TouchableOpacity>
-                <Image source={require('../../../assets/images/profile/edit.png')} style={styles.editIcon} />
-              </TouchableOpacity>
+                  <Image source={require('../../../assets/images/profile/edit.png')} style={styles.editIcon} />
+                </TouchableOpacity>
                 <Text style={styles.profileGreeting}>{profileData.greeting}</Text>
                 <Text style={styles.profileName}>{profileData.name}</Text>
                 <Text style={styles.profileUsername}>{profileData.username}</Text>
               </View>
-              
             </View>
           </View>
         </View>
@@ -107,11 +119,11 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
         {/* Progress Bar */}
         <View style={styles.progressSection}>
           <View style={styles.progressBar}>
-            <View 
+            <View
               style={[
-                styles.progressFill, 
-                { width: `${profileData.profileCompletion}%` }
-              ]} 
+                styles.progressFill,
+                { width: `${profileData.profileCompletion}%` },
+              ]}
             />
           </View>
           <Text style={styles.progressText}>
@@ -122,34 +134,34 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
         {/* General Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>General</Text>
-          <MenuItem 
-            icon={require('../../../assets/images/profile/user1.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/user1.png')}
             label="My Profile"
             onPress={() => navigation?.navigate('Profile', { isMyProfile: true })}
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/heart.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/heart.png')}
             label="Choose Interest"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/bell.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/bell.png')}
             label="Notifications"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/gift.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/gift.png')}
             label="Invite & Earn"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/translate.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/translate.png')}
             label="Translate Language"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/block.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/block.png')}
             label="Blocked User"
             onPress={() => navigation?.navigate('BlockList')}
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/lock.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/lock.png')}
             label="Privacy & Security"
           />
         </View>
@@ -157,8 +169,8 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
         {/* More Options Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>More Options</Text>
-          <MenuItem 
-            icon={require('../../../assets/images/home/save.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/home/save.png')}
             label="Saved Post"
             onPress={() => navigation?.navigate('SavedPost')}
           />
@@ -167,29 +179,39 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
         {/* Chatter Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Chatter</Text>
-          <MenuItem 
-            icon={require('../../../assets/images/profile/star1.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/star1.png')}
             label="Stared messages"
+          />
+        </View>
+
+        {/* Utilities Section — Blood Donation opens BloodBankFlow */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Utilities</Text>
+          <MenuItem
+            icon={require('../../../assets/images/profile/star1.png')}
+            label="Blood Donation"
+            onPress={() => setShowBloodBank(true)}
           />
         </View>
 
         {/* Knobee Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Knobee</Text>
-          <MenuItem 
-            icon={require('../../../assets/images/profile/info.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/info.png')}
             label="About Knobee"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/file.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/file.png')}
             label="Privacy Policy"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/hand-pointer.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/hand-pointer.png')}
             label="Terms of Use"
           />
-          <MenuItem 
-            icon={require('../../../assets/images/profile/logout.png')} 
+          <MenuItem
+            icon={require('../../../assets/images/profile/logout.png')}
             label="Logout"
           />
         </View>
@@ -198,15 +220,11 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
         <View style={styles.ratingSection}>
           <Text style={styles.ratingText}>Rate us on Play Store</Text>
           <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
+            {[1, 2, 3, 4, 5].map(star => (
               <TouchableOpacity key={star} onPress={() => setRating(star)}>
-                <Image 
-                  source={
-                    star <= rating 
-                      ? require('../../../assets/images/profile/star1.png') 
-                      : require('../../../assets/images/profile/star1.png')
-                  } 
-                  style={styles.starIcon} 
+                <Image
+                  source={require('../../../assets/images/profile/star1.png')}
+                  style={[styles.starIcon, { tintColor: star <= rating ? '#F5A623' : '#CCCCCC' }]}
                 />
               </TouchableOpacity>
             ))}
@@ -219,7 +237,7 @@ const SettingsScreen = ({ navigation }: SettingsScreenProps) => {
   );
 };
 
-// Saved Post Screen
+// ─── Saved Post Screen ────────────────────────────────────────────────────────
 export const SavedPostScreen = ({ navigation }: { navigation?: any }) => {
   const renderSavedPost = ({ item }: { item: SavedPost }) => (
     <TouchableOpacity style={styles.savedPostItem}>
@@ -249,7 +267,7 @@ export const SavedPostScreen = ({ navigation }: { navigation?: any }) => {
   );
 };
 
-// Block List Screen
+// ─── Block List Screen ────────────────────────────────────────────────────────
 export const BlockListScreen = ({ navigation }: { navigation?: any }) => {
   const [blockedUsers, setBlockedUsers] = useState(BLOCKED_USERS);
 
@@ -264,7 +282,7 @@ export const BlockListScreen = ({ navigation }: { navigation?: any }) => {
         <Text style={styles.blockedUserName}>{item.name}</Text>
         <Text style={styles.blockedUserUsername}>{item.username}</Text>
       </View>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.unblockBtn}
         onPress={() => handleUnblock(item.id)}
       >
@@ -307,9 +325,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e8e8e8',
   },
   iconBack: { width: 24, height: 24, tintColor: '#1a1a1a' },
-  headerTitle: { 
-    fontSize: 20, 
-    fontFamily: 'SofiaSansCondensed-SemiBold', 
+  headerTitle: {
+    fontSize: 20,
+    fontFamily: 'SofiaSansCondensed-SemiBold',
     color: '#1a1a1a',
   },
 
@@ -322,32 +340,32 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     gap: 12,
   },
-  profileAvatar: { 
-    width: 90, 
-    height: 90, 
+  profileAvatar: {
+    width: 90,
+    height: 90,
     borderRadius: 20,
   },
   profileInfo: { flex: 1 },
-  profileHeader: { 
-    flexDirection: 'row', 
+  profileHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginTop:6
+    marginTop: 6,
   },
-  profileGreeting: { 
-    fontSize: 14, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  profileGreeting: {
+    fontSize: 14,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#666',
   },
-  profileName: { 
-    fontSize: 20, 
-    fontFamily: 'SofiaSansCondensed-Bold', 
+  profileName: {
+    fontSize: 20,
+    fontFamily: 'SofiaSansCondensed-Bold',
     color: '#1a1a1a',
     marginTop: 2,
   },
-  profileUsername: { 
-    fontSize: 14, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  profileUsername: {
+    fontSize: 14,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#999',
     marginTop: 2,
   },
@@ -367,17 +385,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,140,50,1)',
     borderRadius: 4,
   },
-  progressText: { 
-    fontSize: 13, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  progressText: {
+    fontSize: 13,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#666',
   },
 
   // Section
   section: { marginBottom: 24 },
-  sectionTitle: { 
-    fontSize: 16, 
-    fontFamily: 'SofiaSansCondensed-Bold', 
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: 'SofiaSansCondensed-Bold',
     color: '#1a1a1a',
     paddingHorizontal: 16,
     marginBottom: 8,
@@ -387,27 +405,27 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical:8,
+    paddingVertical: 8,
     paddingHorizontal: 16,
     gap: 16,
   },
   menuIcon: { width: 22, height: 22, tintColor: '#1a1a1a' },
-  menuLabel: { 
-    flex: 1, 
-    fontSize: 16, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  menuLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#1a1a1a',
   },
   chevronIcon: { width: 16, height: 16, tintColor: '#999' },
 
   // Rating
-  ratingSection: { 
-    alignItems: 'center', 
+  ratingSection: {
+    alignItems: 'center',
     paddingVertical: 30,
   },
-  ratingText: { 
-    fontSize: 15, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  ratingText: {
+    fontSize: 15,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#666',
     marginBottom: 16,
   },
@@ -418,9 +436,9 @@ const styles = StyleSheet.create({
   savedPostList: { padding: 16 },
   savedPostRow: { gap: 16, marginBottom: 16 },
   savedPostItem: { flex: 1 },
-  savedPostImage: { 
-    width: '100%', 
-    aspectRatio: 1, 
+  savedPostImage: {
+    width: '100%',
+    aspectRatio: 1,
     borderRadius: 16,
     backgroundColor: '#f0f0f0',
   },
@@ -435,20 +453,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: '#f0f0f0',
   },
-  blockedUserAvatar: { 
-    width: 56, 
-    height: 56, 
+  blockedUserAvatar: {
+    width: 56,
+    height: 56,
     borderRadius: 16,
   },
   blockedUserInfo: { flex: 1 },
-  blockedUserName: { 
-    fontSize: 17, 
-    fontFamily: 'SofiaSansCondensed-SemiBold', 
+  blockedUserName: {
+    fontSize: 17,
+    fontFamily: 'SofiaSansCondensed-SemiBold',
     color: '#1a1a1a',
   },
-  blockedUserUsername: { 
-    fontSize: 14, 
-    fontFamily: 'SofiaSansCondensed-Regular', 
+  blockedUserUsername: {
+    fontSize: 14,
+    fontFamily: 'SofiaSansCondensed-Regular',
     color: '#999',
     marginTop: 2,
   },
@@ -459,9 +477,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#999',
   },
-  unblockBtnText: { 
-    fontSize: 14, 
-    fontFamily: 'SofiaSansCondensed-SemiBold', 
+  unblockBtnText: {
+    fontSize: 14,
+    fontFamily: 'SofiaSansCondensed-SemiBold',
     color: '#666',
   },
 });

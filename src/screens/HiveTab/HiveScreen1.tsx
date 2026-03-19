@@ -677,10 +677,10 @@ function Header({ focusedPersonId, onOpenDiary }) {
 }
 
 // ─── Add Hiver ───────────────────────────────────────────────────────────────
-function AddHiver() {
+function AddHiver({navigation}) {
   return (
     <View style={styles.addHiverWrap}>
-      <TouchableOpacity style={styles.addHiverBtn} activeOpacity={0.85}>
+      <TouchableOpacity onPress={()=>navigation.navigate('AddHive')} style={styles.addHiverBtn} activeOpacity={0.85}>
         <View style={styles.plusCircle}><Text style={styles.plusTxt}>+</Text></View>
         <Text style={styles.addHiverLabel}>Add Hiver</Text>
       </TouchableOpacity>
@@ -795,7 +795,7 @@ function getFamilyKey(personId, familyType = 'birth') {
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
-export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
+export default function HiveFamilyTree({ initialFocusId = 'sandhya' , navigation }) {
   const [focusedPersonId, setFocusedPersonId] = useState(initialFocusId);
   const [childPage, setChildPage]             = useState(0);
   const [popupData, setPopupData]             = useState(null);
@@ -935,7 +935,7 @@ export default function HiveFamilyTree({ initialFocusId = 'sandhya' }) {
           })}
         />
       ) : (
-        <AddHiver />
+        <AddHiver navigation={navigation}/>
       )}
 
       {popupData && (

@@ -169,19 +169,32 @@ const UserRow = ({
   user,
   tab,
   onToggleFollow,
+  onPressProfile,
 }: {
   user: UserResult;
   tab: TabKey;
   onToggleFollow: (id: string) => void;
+  onPressProfile: (user: UserResult) => void;
 }) => (
   <View style={styles.row}>
-    <Image source={{ uri: user.avatar }} style={styles.avatar} />
-    <View style={styles.rowInfo}>
+    {/* Avatar tap → navigate to profile */}
+    <TouchableOpacity onPress={() => onPressProfile(user)} activeOpacity={0.8}>
+      <Image source={{ uri: user.avatar }} style={styles.avatar} />
+    </TouchableOpacity>
+
+    {/* Name + sub-label tap → navigate to profile */}
+    <TouchableOpacity
+      style={styles.rowInfo}
+      onPress={() => onPressProfile(user)}
+      activeOpacity={0.7}
+    >
       <Text style={styles.rowName}>{user.name}</Text>
       <Text style={styles.rowSub} numberOfLines={1}>
         {getSubLabel(user, tab)}
       </Text>
-    </View>
+    </TouchableOpacity>
+
+    {/* Follow / Following — does NOT navigate */}
     <TouchableOpacity
       style={[styles.followBtn, user.isFollowing && styles.followBtnActive]}
       onPress={() => onToggleFollow(user.id)}
@@ -219,6 +232,11 @@ const SearchScreen = ({ navigation }: Props) => {
     setQuery('');
   };
 
+  // Navigate to Profile screen, passing userId + full user object as params
+  const handlePressProfile = (user: UserResult) => {
+    navigation?.navigate('Profile', { userId: 'iamshrishiii', user });
+  };
+
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
@@ -230,7 +248,7 @@ const SearchScreen = ({ navigation }: Props) => {
           />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Search</Text>
-        <TouchableOpacity onPress={()=>navigation.navigate('NearbySearch')} hitSlop={10}>
+        <TouchableOpacity onPress={() => navigation?.navigate('NearbySearch')} hitSlop={10}>
           <Image
             source={require('../../../assets/images/home/filter.png')}
             style={styles.iconFilter}
@@ -277,7 +295,6 @@ const SearchScreen = ({ navigation }: Props) => {
             </TouchableOpacity>
           ))}
         </ScrollView>
-        {/* Full-width bottom border */}
         <View style={styles.tabsBorder} />
       </View>
 
@@ -286,7 +303,12 @@ const SearchScreen = ({ navigation }: Props) => {
         data={results}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <UserRow user={item} tab={activeTab} onToggleFollow={handleToggleFollow} />
+          <UserRow
+            user={item}
+            tab={activeTab}
+            onToggleFollow={handleToggleFollow}
+            onPressProfile={handlePressProfile}
+          />
         )}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -347,19 +369,18 @@ const styles = StyleSheet.create({
   searchIcon: { width: 22, height: 22, tintColor: 'rgba(255,140,50,1)' },
 
   // Tabs
-  tabsWrapper: { position: 'relative',width: '100%', },
+  tabsWrapper: { position: 'relative', width: '100%' },
   tabsContent: {
     paddingHorizontal: 16,
     gap: 4,
-    width: '100%', // Ensure content width accommodates all tabs
+    width: '100%',
   },
   tabItem: {
     paddingHorizontal: 8,
     paddingBottom: 10,
     position: 'relative',
     alignItems: 'center',
-    // backgroundColor:'blue',
-    width:'19%'
+    width: '19%',
   },
   tabText: {
     fontSize: 15,
