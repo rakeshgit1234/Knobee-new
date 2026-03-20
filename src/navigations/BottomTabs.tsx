@@ -143,7 +143,7 @@ const TabButton = ({ tab, focused, onPress, isCenter }) => {
           <Text
             style={[
               styles.label,
-              { color: focused ? '#fff' : '#aaa' }
+              { color: focused ? '#fff' : 'rgba(255, 240, 200, 1)' }
             ]}
           >
             {tab.label}

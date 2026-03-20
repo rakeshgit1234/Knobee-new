@@ -10,6 +10,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import NearbySearchScreen from './NearbySearchScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type TabKey = 'Name' | 'Tags' | 'Location' | 'Profession' | 'Education';
@@ -120,7 +121,6 @@ const ALL_USERS: UserResult[] = [
 
 const TABS: TabKey[] = ['Name', 'Tags', 'Location', 'Profession', 'Education'];
 
-// ─── Tab placeholders ─────────────────────────────────────────────────────────
 const TAB_PLACEHOLDER: Record<TabKey, string> = {
   Name: 'Search by name…',
   Tags: 'Search by tag e.g. #travel…',
@@ -129,7 +129,6 @@ const TAB_PLACEHOLDER: Record<TabKey, string> = {
   Education: 'Search by college or university…',
 };
 
-// ─── Sub-label shown below name for each tab ─────────────────────────────────
 const getSubLabel = (user: UserResult, tab: TabKey): string => {
   switch (tab) {
     case 'Name':       return user.username;
@@ -140,21 +139,16 @@ const getSubLabel = (user: UserResult, tab: TabKey): string => {
   }
 };
 
-// ─── Filter logic per tab ─────────────────────────────────────────────────────
 const filterUsers = (users: UserResult[], query: string, tab: TabKey): UserResult[] => {
   const q = query.toLowerCase().trim();
   if (!q) return users;
   switch (tab) {
     case 'Name':
-      return users.filter(
-        u =>
-          u.name.toLowerCase().includes(q) ||
-          u.username.toLowerCase().includes(q),
-      );
+      return users.filter(u =>
+        u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q));
     case 'Tags':
       return users.filter(u =>
-        u.tags.some(t => t.toLowerCase().includes(q.replace('#', ''))),
-      );
+        u.tags.some(t => t.toLowerCase().includes(q.replace('#', ''))));
     case 'Location':
       return users.filter(u => u.location.toLowerCase().includes(q));
     case 'Profession':
@@ -166,10 +160,7 @@ const filterUsers = (users: UserResult[], query: string, tab: TabKey): UserResul
 
 // ─── User Row ─────────────────────────────────────────────────────────────────
 const UserRow = ({
-  user,
-  tab,
-  onToggleFollow,
-  onPressProfile,
+  user, tab, onToggleFollow, onPressProfile,
 }: {
   user: UserResult;
   tab: TabKey;
@@ -177,31 +168,18 @@ const UserRow = ({
   onPressProfile: (user: UserResult) => void;
 }) => (
   <View style={styles.row}>
-    {/* Avatar tap → navigate to profile */}
     <TouchableOpacity onPress={() => onPressProfile(user)} activeOpacity={0.8}>
       <Image source={{ uri: user.avatar }} style={styles.avatar} />
     </TouchableOpacity>
-
-    {/* Name + sub-label tap → navigate to profile */}
-    <TouchableOpacity
-      style={styles.rowInfo}
-      onPress={() => onPressProfile(user)}
-      activeOpacity={0.7}
-    >
+    <TouchableOpacity style={styles.rowInfo} onPress={() => onPressProfile(user)} activeOpacity={0.7}>
       <Text style={styles.rowName}>{user.name}</Text>
-      <Text style={styles.rowSub} numberOfLines={1}>
-        {getSubLabel(user, tab)}
-      </Text>
+      <Text style={styles.rowSub} numberOfLines={1}>{getSubLabel(user, tab)}</Text>
     </TouchableOpacity>
-
-    {/* Follow / Following — does NOT navigate */}
     <TouchableOpacity
       style={[styles.followBtn, user.isFollowing && styles.followBtnActive]}
       onPress={() => onToggleFollow(user.id)}
     >
-      <Text
-        style={[styles.followBtnText, user.isFollowing && styles.followBtnTextActive]}
-      >
+      <Text style={[styles.followBtnText, user.isFollowing && styles.followBtnTextActive]}>
         {user.isFollowing ? 'Following' : 'Follow back'}
       </Text>
     </TouchableOpacity>
@@ -213,18 +191,20 @@ type Props = { navigation?: any };
 
 const SearchScreen = ({ navigation }: Props) => {
   const [activeTab, setActiveTab] = useState<TabKey>('Name');
-  const [query, setQuery] = useState('Shubham');
-  const [users, setUsers] = useState<UserResult[]>(ALL_USERS);
+  const [query, setQuery]         = useState('Shubham');
+  const [users, setUsers]         = useState<UserResult[]>(ALL_USERS);
 
+  // ── Inline NearbySearch navigation ───────────────────────────────────────
+  const [showNearby, setShowNearby] = useState(false);
+
+  // ALL hooks must be before any conditional return
   const results = useMemo(
     () => filterUsers(users, query, activeTab),
     [users, query, activeTab],
   );
 
   const handleToggleFollow = (id: string) => {
-    setUsers(prev =>
-      prev.map(u => (u.id === id ? { ...u, isFollowing: !u.isFollowing } : u)),
-    );
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, isFollowing: !u.isFollowing } : u));
   };
 
   const handleTabChange = (tab: TabKey) => {
@@ -232,27 +212,33 @@ const SearchScreen = ({ navigation }: Props) => {
     setQuery('');
   };
 
-  // Navigate to Profile screen, passing userId + full user object as params
   const handlePressProfile = (user: UserResult) => {
     navigation?.navigate('Profile', { userId: 'iamshrishiii', user });
   };
+
+  // ── Conditional renders (after all hooks) ─────────────────────────────────
+  if (showNearby) {
+    return (
+      <NearbySearchScreen
+        navigation={{
+          goBack: () => setShowNearby(false),
+          navigate: navigation?.navigate,
+        }}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation?.goBack()} hitSlop={10}>
-          <Image
-            source={require('../../../assets/images/chat/back.png')}
-            style={styles.iconBack}
-          />
+          <Image source={require('../../../assets/images/chat/back.png')} style={styles.iconBack} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Search</Text>
-        <TouchableOpacity onPress={() => navigation?.navigate('NearbySearch')} hitSlop={10}>
-          <Image
-            source={require('../../../assets/images/home/filter.png')}
-            style={styles.iconFilter}
-          />
+        {/* Filter icon → opens NearbySearch inline */}
+        <TouchableOpacity onPress={() => setShowNearby(true)} hitSlop={10}>
+          <Image source={require('../../../assets/images/home/filter.png')} style={styles.iconFilter} />
         </TouchableOpacity>
       </View>
 
@@ -267,30 +253,15 @@ const SearchScreen = ({ navigation }: Props) => {
           autoCorrect={false}
           autoCapitalize="none"
         />
-        <Image
-          source={require('../../../assets/images/home/search.png')}
-          style={styles.searchIcon}
-        />
+        <Image source={require('../../../assets/images/home/search.png')} style={styles.searchIcon} />
       </View>
 
       {/* ── Tabs ── */}
       <View style={styles.tabsWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContent}
-        >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsContent}>
           {TABS.map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={styles.tabItem}
-              onPress={() => handleTabChange(tab)}
-            >
-              <Text
-                style={[styles.tabText, activeTab === tab && styles.tabTextActive]}
-              >
-                {tab}
-              </Text>
+            <TouchableOpacity key={tab} style={styles.tabItem} onPress={() => handleTabChange(tab)}>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
               {activeTab === tab && <View style={styles.tabUnderline} />}
             </TouchableOpacity>
           ))}
@@ -326,146 +297,62 @@ const SearchScreen = ({ navigation }: Props) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
 
-  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 54 : 16,
     paddingBottom: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#e8e8e8',
+    borderBottomWidth: 0.5, borderBottomColor: '#e8e8e8',
     backgroundColor: '#fff',
   },
-  iconBack: { width: 24, height: 24, tintColor: '#1a1a1a' },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: 'SofiaSansCondensed-SemiBold',
-    color: '#1a1a1a',
-  },
+  iconBack:   { width: 24, height: 24, tintColor: '#1a1a1a' },
   iconFilter: { width: 24, height: 24, tintColor: '#1a1a1a' },
+  headerTitle: { fontSize: 18, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
 
-  // Search bar
   searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 14,
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: 16, marginTop: 16, marginBottom: 14,
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === 'ios' ? 14 : 3,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,140,50,0.6)',
-    backgroundColor: '#fff',
+    borderRadius: 14, borderWidth: 1.5,
+    borderColor: 'rgba(255,140,50,0.6)', backgroundColor: '#fff',
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'SofiaSansCondensed-Regular',
-    color: '#1a1a1a',
-  },
-  searchIcon: { width: 22, height: 22, tintColor: 'rgba(255,140,50,1)' },
+  searchInput: { flex: 1, fontSize: 16, fontFamily: 'SofiaSansCondensed-Regular', color: '#1a1a1a' },
+  searchIcon:  { width: 22, height: 22, tintColor: 'rgba(255,140,50,1)' },
 
-  // Tabs
   tabsWrapper: { position: 'relative', width: '100%' },
-  tabsContent: {
-    paddingHorizontal: 16,
-    gap: 4,
-    width: '100%',
-  },
+  tabsContent: { paddingHorizontal: 16, gap: 4, width: '100%' },
   tabItem: {
-    paddingHorizontal: 8,
-    paddingBottom: 10,
-    position: 'relative',
-    alignItems: 'center',
-    width: '19%',
+    paddingHorizontal: 8, paddingBottom: 10,
+    position: 'relative', alignItems: 'center', width: '19%',
   },
-  tabText: {
-    fontSize: 15,
-    fontFamily: 'SofiaSansCondensed-Regular',
-    color: '#999',
-  },
-  tabTextActive: {
-    fontFamily: 'SofiaSansCondensed-SemiBold',
-    color: '#1a1a1a',
-  },
+  tabText:       { fontSize: 15, fontFamily: 'SofiaSansCondensed-Regular', color: '#999' },
+  tabTextActive: { fontFamily: 'SofiaSansCondensed-SemiBold', color: '#1a1a1a' },
   tabUnderline: {
-    position: 'absolute',
-    bottom: 0,
-    left: 8,
-    right: 8,
-    height: 2.5,
-    borderRadius: 2,
-    backgroundColor: '#888',
+    position: 'absolute', bottom: 0, left: 8, right: 8,
+    height: 2.5, borderRadius: 2, backgroundColor: '#888',
   },
-  tabsBorder: {
-    height: 0.5,
-    backgroundColor: '#e8e8e8',
-    marginTop: -0.5,
-  },
+  tabsBorder: { height: 0.5, backgroundColor: '#e8e8e8', marginTop: -0.5 },
 
-  // List
   listContent: { paddingTop: 4, paddingBottom: 24 },
 
-  // User row
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 12,
-  },
-  avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 16,
-    flexShrink: 0,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 12 },
+  avatar: { width: 60, height: 60, borderRadius: 16, flexShrink: 0 },
   rowInfo: { flex: 1 },
-  rowName: {
-    fontSize: 17,
-    fontFamily: 'SofiaSansCondensed-Bold',
-    color: '#1a1a1a',
-  },
-  rowSub: {
-    fontSize: 14,
-    fontFamily: 'SofiaSansCondensed-Regular',
-    color: '#999',
-    marginTop: 2,
-  },
+  rowName: { fontSize: 17, fontFamily: 'SofiaSansCondensed-Bold', color: '#1a1a1a' },
+  rowSub:  { fontSize: 14, fontFamily: 'SofiaSansCondensed-Regular', color: '#999', marginTop: 2 },
 
-  // Follow button
   followBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#5badee',
-    backgroundColor: 'transparent',
-    flexShrink: 0,
+    paddingHorizontal: 16, paddingVertical: 5,
+    borderRadius: 20, borderWidth: 1.5, borderColor: '#5badee',
+    backgroundColor: 'transparent', flexShrink: 0,
   },
-  followBtnActive: {
-    backgroundColor: '#5badee',
-    borderColor: '#5badee',
-  },
-  followBtnText: {
-    fontSize: 14,
-    fontFamily: 'SofiaSansCondensed-SemiBold',
-    color: '#5badee',
-  },
-  followBtnTextActive: {
-    color: '#fff',
-  },
+  followBtnActive:    { backgroundColor: '#5badee', borderColor: '#5badee' },
+  followBtnText:      { fontSize: 14, fontFamily: 'SofiaSansCondensed-SemiBold', color: '#5badee' },
+  followBtnTextActive: { color: '#fff' },
 
-  // Empty
   emptyWrap: { paddingTop: 60, alignItems: 'center' },
-  emptyText: {
-    fontSize: 15,
-    fontFamily: 'SofiaSansCondensed-Regular',
-    color: '#bbb',
-  },
+  emptyText: { fontSize: 15, fontFamily: 'SofiaSansCondensed-Regular', color: '#bbb' },
 });
 
 export default SearchScreen;

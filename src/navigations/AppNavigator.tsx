@@ -42,6 +42,7 @@ import AddHiveScreen from '../screens/HiveTab/AddHiveScreen';
 import BulkInviteScreen from '../screens/ChatterzTab/BulkInviteScreen';
 import ProfileScreen from '../screens/ProfileTab/othersprofile';
 import RelationFinderScreen from '../screens/ProfileTab/RelationFinderScreen';
+import FamilyTreeScreen from '../screens/HomeTab/FamilyTreeScreen';
 
 
 
@@ -130,6 +131,7 @@ const AppNavigator = () => {
 <Stack.Screen name="BulkInvite" component={BulkInviteScreen} />
 <Stack.Screen name="Profile" component={ProfileScreen} />
 <Stack.Screen name="RelationFinder" component={RelationFinderScreen} />
+<Stack.Screen name="FamilyTree" component={FamilyTreeScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>

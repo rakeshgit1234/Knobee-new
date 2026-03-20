@@ -114,13 +114,33 @@ const ChatterZScreen = ({ navigation }: { navigation?: any }) => {
             style={styles.dropdownItem}
             onPress={() => { setShowMenu(false); navigation?.navigate('CreateGroup'); }}
           >
+            <Image source={require('../../../assets/images/chat/add.png')} style={{ width: 18, height: 18 }} />
+            <Text style={styles.dropdownLabel}>Add Chat</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dropdownItem}
+            onPress={() => { setShowMenu(false); navigation?.navigate('CreateGroup'); }}
+          >
             <Image source={require('../../../assets/images/chat/group.png')} style={{ width: 18, height: 18 }} />
             <Text style={styles.dropdownLabel}>Create Group</Text>
           </TouchableOpacity>
-          <View style={styles.dropdownDivider} />
-          <TouchableOpacity style={styles.dropdownItem} onPress={() => { setShowMenu(false); navigation?.navigate('BulkInvite'); }}>
+            <TouchableOpacity style={[styles.dropdownItem,{flexDirection:'column',alignItems:'flex-start'}]} onPress={() => { setShowMenu(false); navigation?.navigate('BulkInvite'); }}>
+           <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
+            <Image source={require('../../../assets/images/chat/Chats.png')} style={{ width: 18, height: 18 }} />
+            <Text style={styles.dropdownLabel}>Broadcast</Text></View>
+             <Text  style={[styles.dropdownLabel,{fontSize:14,color:'#555'}]}>
+            simply dummy text of the printing and   typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged.
+          </Text>
+          </TouchableOpacity>
+         
+          <TouchableOpacity style={[styles.dropdownItem,{flexDirection:'column',alignItems:'flex-start'}]} onPress={() => { setShowMenu(false); navigation?.navigate('BulkInvite'); }}>
+            <View style={{flexDirection:'row',alignItems:'center',gap:12}}>
             <Image source={require('../../../assets/images/chat/invite.png')} style={{ width: 18, height: 18 }} />
             <Text style={styles.dropdownLabel}>Bulk Invite</Text>
+            </View>
+             <Text  style={[styles.dropdownLabel,{color:'#555',fontSize:14}]}>
+            simply dummy text of the printing and   typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type and scrambled it to make a type specimen book. It has survived not only five centuries, but also the leap into electronic typesetting, remaining essentially unchanged.
+          </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -155,7 +175,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 62, right: 16, zIndex: 100,
     backgroundColor: '#fff', borderRadius: 12, paddingVertical: 4,
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12, elevation: 8,
-    minWidth: 180,
+    minWidth: 180,maxWidth: width - 170,
   },
   dropdownItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 14, gap: 12 },
   dropdownLabel: { fontSize: 16, fontFamily: 'SofiaSansCondensed-Regular', color: '#1a1a1a' },

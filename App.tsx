@@ -10,7 +10,7 @@ function App() {
 
   return (
     <View style={{flex: 1}}>
-    <StatusBar barStyle="dark-content"  /> 
+    <StatusBar barStyle="dark-content" backgroundColor={'grey'} /> 
     // style the bar. barStyle is text and icon color od status bar.
 <AppNavigator />
  </View>
